@@ -17,6 +17,8 @@
 <body>
   <noscript><p class="noscript">This app needs JavaScript. / يتطلب هذا التطبيق تفعيل JavaScript.</p></noscript>
 
+  <div id="boot" class="boot" aria-hidden="true"><img src="brand/mark.png" width="56" height="84" alt="" /></div>
+
   <!-- ============ Landing ============ -->
   <main id="landing" class="landing" hidden>
     <div class="band landing-band">
@@ -125,12 +127,14 @@
                 <p class="drop-title" id="drop-title"></p>
                 <p class="drop-hint muted small" id="drop-hint" data-i18n="dropHint"></p>
                 <div class="btn-row center">
-                  <button type="button" class="btn btn-quiet small" id="btn-choose-files" data-i18n="chooseFiles"></button>
-                  <button type="button" class="btn btn-quiet small" id="btn-choose-folder" data-i18n="chooseFolder"></button>
+                  <label for="file-input" class="btn btn-primary small" id="btn-choose-files" tabindex="0" role="button" data-i18n="chooseFiles"></label>
+                  <label for="folder-input" class="btn btn-quiet small" id="btn-choose-folder" tabindex="0" role="button" data-i18n="chooseFolder"></label>
                 </div>
+                <p class="ios-tip muted small" id="ios-tip" data-i18n="iosTip" hidden></p>
               </div>
-              <input id="file-input" type="file" multiple hidden />
-              <input id="folder-input" type="file" multiple webkitdirectory hidden />
+              <!-- No "accept" filter: every file type Drive can store is allowed. -->
+              <input id="file-input" class="file-input" type="file" multiple tabindex="-1" aria-hidden="true" />
+              <input id="folder-input" class="file-input" type="file" multiple webkitdirectory tabindex="-1" aria-hidden="true" />
               <div id="selection-bar" class="selection-bar" hidden>
                 <span id="selection-summary"></span>
                 <button type="button" class="linkbtn" id="btn-clear" data-i18n="clearSelection"></button>
@@ -187,6 +191,7 @@
           <div class="meter-side">
             <p class="overall-label" data-i18n="overall"></p>
             <p id="uploading-to" class="uploading-to"></p>
+            <p id="files-count" class="files-count"></p>
             <p id="eta" class="eta muted"></p>
             <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" id="overall-bar"><span id="overall-fill"></span></div>
           </div>
@@ -225,7 +230,10 @@
           <button type="button" role="tab" class="chip" data-filter="failed"><span data-i18n="filterFailed"></span> <b data-count="failed"></b></button>
         </div>
         <ul id="file-list" class="file-list"></ul>
-        <p id="list-more" class="muted small center" hidden></p>
+        <div id="list-more" class="list-more" hidden>
+          <p id="list-more-text" class="muted small"></p>
+          <button type="button" class="btn btn-quiet small" id="list-more-btn" data-i18n="showMore"></button>
+        </div>
         <p id="list-empty" class="muted small center" data-i18n="emptyFilter" hidden></p>
 
         <details class="debug" id="debug">
@@ -256,10 +264,10 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m-4.5 4.5L12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
         <span data-i18n="navUpload"></span>
       </a>
-      <button type="button" class="bn-add" id="btn-bn-add">
+      <label for="file-input" class="bn-add" id="btn-bn-add" role="button">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         <span class="sr-only" data-i18n="chooseFiles"></span>
-      </button>
+      </label>
       <a href="#history" class="bn-item" data-tab="history">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
         <span data-i18n="navHistory"></span>

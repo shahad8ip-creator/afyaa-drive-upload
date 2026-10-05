@@ -118,6 +118,11 @@ export const mockDrive = {
   async cancelSession(uri) {
     sessions.delete(uri);
   },
+  async ping() {
+    await wait(100);
+    guard();
+    return true;
+  },
   async readAppData(name) {
     await wait(200);
     try {

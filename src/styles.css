@@ -235,7 +235,7 @@ html[lang='ar'] .landing-title { display: none; } /* the Arabic line above alrea
 .step.is-done .step-num { background: var(--band); color: #fff; }
 .step-body { min-width: 0; padding-top: 3px; }
 .step-body h2 { font-size: 1.1rem; color: var(--indigo); margin-bottom: 8px; padding-top: 6px; }
-.locked .step-body .btn, .locked .dropzone, .locked .check { pointer-events: none; opacity: .55; }
+.locked .step-body .btn, .locked .step-body label.btn, .locked .dropzone, .locked .check { pointer-events: none; opacity: .55; }
 
 .dest-chosen {
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-top: 4px;
@@ -256,6 +256,17 @@ html[lang='ar'] .landing-title { display: none; } /* the Arabic line above alrea
 .drop-ico { width: 40px; height: 50px; margin: 0 auto 10px; fill: var(--blue-wash); stroke: var(--blue); stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
 .drop-title { font-weight: 500; font-size: 1.02rem; max-width: 30ch; margin: 0 auto; }
 .drop-hint { margin-top: 4px; }
+/* Kept in the page (not display:none) so every browser, including iOS Safari,
+   opens the native picker for it; visually hidden. */
+.file-input { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; clip: rect(0 0 0 0); pointer-events: none; }
+label.btn { cursor: pointer; user-select: none; -webkit-user-select: none; }
+.ios-tip { max-width: 44ch; margin: 12px auto 0; }
+.files-count { font-weight: 500; margin-top: 2px; }
+.list-more { display: grid; justify-items: center; gap: 8px; margin-top: 12px; }
+.boot { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; background: var(--bg, #FBF8F2); }
+.boot img { opacity: .5; animation: boot-pulse 1.4s ease-in-out infinite; }
+@keyframes boot-pulse { 50% { opacity: .2; } }
+@media (prefers-reduced-motion: reduce) { .boot img { animation: none; } }
 .selection-bar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-top: 10px; padding: 8px 4px; font-size: 0.92rem; font-weight: 500;

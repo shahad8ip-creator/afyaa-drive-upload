@@ -47,7 +47,7 @@ function request(method, url, { headers = {}, body = null, onProgress, signal, a
     const xhr = new XMLHttpRequest();
     xhr.open(method, url);
     xhr.responseType = responseType;
-    if (auth) xhr.setRequestHeader('Authorization', `Bearer ${getToken()}`);
+    if (auth && getToken()) xhr.setRequestHeader('Authorization', `Bearer ${getToken()}`);
     for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
     if (onProgress) xhr.upload.onprogress = (e) => onProgress(e.loaded);
     const onAbort = () => xhr.abort();
@@ -159,9 +159,11 @@ export const realDrive = {
 
   // Sends bytes [start, end) of the blob. Resolves with the next offset the
   // server expects, or with the created file when the upload is complete.
+  // `blob.slice` is a lazy view of the file on disk: no bytes are read into
+  // JavaScript memory; the browser streams them straight into the request.
   async putChunk(sessionUri, blob, start, end, { onProgress, signal } = {}) {
     const total = blob.size;
-    const xhr = await request('PUT', sessionUri, {
+    const xhr = await sessionRequest('PUT', sessionUri, {
       headers: { 'Content-Range': `bytes ${start}-${end - 1}/${total}` },
       body: blob.slice(start, end),
       onProgress,
@@ -173,14 +175,21 @@ export const realDrive = {
   // Asks the server how many bytes it already has, so only the missing part
   // is sent again after a failure.
   async queryOffset(sessionUri, total, { signal } = {}) {
-    const xhr = await request('PUT', sessionUri, { headers: { 'Content-Range': `bytes */${total}` }, signal });
+    const xhr = await sessionRequest('PUT', sessionUri, { headers: { 'Content-Range': `bytes */${total}` }, signal });
     return parseSessionResponse(xhr);
   },
 
   async cancelSession(sessionUri) {
     try {
-      await request('DELETE', sessionUri);
+      await sessionRequest('DELETE', sessionUri);
     } catch {}
+  },
+
+  // Connectivity check that needs no valid token: any HTTP answer from Google
+  // (even 401/404) means the network is back.
+  async ping() {
+    const xhr = await request('GET', `${API}/about?fields=kind`, { auth: false });
+    return xhr.status > 0;
   },
 
   async readAppData(name) {
@@ -207,6 +216,20 @@ export const realDrive = {
     return id === 'root' ? 'https://drive.google.com/drive/my-drive' : `https://drive.google.com/drive/folders/${encodeURIComponent(id)}`;
   },
 };
+
+// The resumable session URI itself authorises the upload (Google's own
+// examples send no Authorization header), so chunks keep flowing even when
+// the 1-hour access token expires in the middle of a large file. If Google
+// ever answers 401 without a token, retry once with it.
+let sessionNeedsAuth = false;
+async function sessionRequest(method, url, opts) {
+  const xhr = await request(method, url, { ...opts, auth: sessionNeedsAuth });
+  if (xhr.status === 401 && !sessionNeedsAuth && getToken()) {
+    sessionNeedsAuth = true;
+    return request(method, url, { ...opts, auth: true });
+  }
+  return xhr;
+}
 
 function parseSessionResponse(xhr) {
   if (xhr.status === 200 || xhr.status === 201) {

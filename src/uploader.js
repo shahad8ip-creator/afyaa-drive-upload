@@ -2,7 +2,7 @@
 // sessions, adaptive chunk sizes, retry with backoff, offline detection and
 // per-file pause/cancel. One instance per signed-in session.
 
-import { tuning } from './config.js';
+import { tuning, isDemo } from './config.js';
 import { msLeft, requestToken } from './auth.js';
 import { DriveError } from './drive.js';
 import { muteVideo, abortMute, MuteError } from './mute.js';
@@ -33,6 +33,11 @@ export class Uploader {
     this._lastSample = { t: performance.now(), sent: 0 };
     this._refreshing = null;
     this._softAuthTried = false;
+    this._authBlocked = false; // token expired/refused: only token-free work continues
+    this._prefetching = false;
+    this._cursor = 0; // items before this index are all finished
+    this.slots = tuning.concurrency;
+    this._tune = null;
     this._sampler = setInterval(() => this._sample(), 1000);
     this._authTicker = setInterval(() => this._authTick(), 30000);
     this._poll = null;
@@ -58,6 +63,9 @@ export class Uploader {
     this.state = 'running';
     this.banner = null;
     this.speed = 0;
+    this._cursor = 0;
+    this._tune = null;
+    this._authBlocked = false;
     for (const it of items) {
       it.fp = fingerprint(it, folder.id);
       it.chunk = tuning.chunkStart;
@@ -93,8 +101,10 @@ export class Uploader {
   reauthorize() {
     return requestToken({ prompt: '', hint: this.email }).then(() => {
       this._softAuthTried = false;
+      this._authBlocked = false;
       if (this.banner === 'auth') this.banner = null;
       if (this.state === 'needsAuth') this.resume();
+      else this._pump();
       this._emit();
     });
   }
@@ -137,6 +147,7 @@ export class Uploader {
     it.status = 'waiting';
     it.attempts = 0;
     it.error = null;
+    this._cursor = 0;
     if (this.state === 'done' || this.state === 'blocked') {
       this.state = 'running';
       this.banner = null;
@@ -205,14 +216,29 @@ export class Uploader {
     return it.mute && it.kind === 'video' && !it.blob;
   }
 
+  // A token is needed to open a new upload (or create folders), but not to
+  // keep sending bytes to an upload session that is already open.
+  _tokenOk() {
+    return isDemo || (!this._authBlocked && msLeft() > 60000);
+  }
+
   _pump() {
     if (this.state !== 'running') return;
     let used = 0;
     for (const it of this.active) used += this._weight(it);
-    for (const it of this.items) {
+    const items = this.items;
+    while (this._cursor < items.length && FINAL.has(items[this._cursor].status)) this._cursor++;
+    const tokenOk = this._tokenOk();
+    let blockedByAuth = 0;
+    for (let i = this._cursor; i < items.length; i++) {
+      const it = items[i];
       if (it.status !== 'waiting') continue;
+      if (!tokenOk && !it.sessionUri) {
+        blockedByAuth++;
+        continue;
+      }
       const w = this._weight(it);
-      if (used + w > tuning.concurrency) {
+      if (used + w > this.slots) {
         if (w === 0.5) break;
         continue;
       }
@@ -224,6 +250,8 @@ export class Uploader {
       used += w;
       this._run(it);
     }
+    // Nothing left that can run without signing in again: wait for the user.
+    if (blockedByAuth && !this.active.size) this._needAuth();
   }
 
   async _run(it) {
@@ -263,19 +291,22 @@ export class Uploader {
       it.uploadSize = src.size;
       it.sent = 0;
       it.status = 'uploading';
+      it.speed = 0;
       this._emit();
-      await this._ensureAuth();
+      if (!it.sessionUri) await this._ensureAuth();
 
       const meta = { name: it.file.name, parents: [parentId], mimeType: it.file.type || undefined, existingId: it.existingId };
       const onProgress = (n) => this._progress(it, n);
       let file;
-      if (src.size <= tuning.multipartMax) {
+      if (src.size <= tuning.multipartMax && !it.sessionUri) {
         file = await this.drive.multipart(meta, src, { onProgress, signal });
       } else {
         file = await this._resumable(it, src, meta, signal);
       }
 
       it.status = 'uploaded';
+      it.speed = 0;
+      it.sessionUri = null;
       it.driveId = file?.id;
       this._progress(it, it.uploadSize);
       this.netStrikes = 0;
@@ -287,6 +318,7 @@ export class Uploader {
     } finally {
       this.active.delete(it);
       it.controller = null;
+      it.speed = 0;
       this._saveManifest();
       this._pump();
       this._checkDone();
@@ -313,12 +345,12 @@ export class Uploader {
       }
     }
     if (!it.sessionUri) {
+      await this._ensureAuth();
       it.sessionUri = await this.drive.startResumable({ ...meta, size: total });
       it.offset = 0;
       if (resumable) store.set(`s:${it.fp}`, { uri: it.sessionUri, total });
     }
     for (;;) {
-      await this._ensureAuth();
       const start = it.offset;
       const end = Math.min(total, start + it.chunk);
       const t0 = performance.now();
@@ -389,8 +421,10 @@ export class Uploader {
         }
         return;
       case 'auth':
+        // Only uploads that need a new token wait; open sessions keep going.
         it.status = 'waiting';
-        this._needAuth();
+        this._authBlocked = true;
+        this.banner = 'auth';
         return;
       case 'rate':
       case 'server':
@@ -473,8 +507,7 @@ export class Uploader {
     this._poll = setInterval(async () => {
       if (!navigator.onLine) return;
       try {
-        await this.drive.getFolder(this.folder.id);
-        this.setOnline(true);
+        if (await this.drive.ping()) this.setOnline(true);
       } catch {}
     }, 5000);
     this._emit();
@@ -484,7 +517,6 @@ export class Uploader {
     if (this.state !== 'running') return;
     this.state = 'needsAuth';
     this.banner = 'auth';
-    this._abortActive('waiting');
     this._emit();
   }
 
@@ -498,7 +530,8 @@ export class Uploader {
   // ---------- auth upkeep ----------
 
   async _ensureAuth() {
-    if (msLeft() > 60000) return;
+    if (this._authBlocked) throw new DriveError('auth', 401, 'tokenExpired');
+    if (isDemo || msLeft() > 60000) return;
     if (!this._refreshing) {
       this._refreshing = requestToken({ prompt: '', hint: this.email }).finally(() => {
         this._refreshing = null;
@@ -514,17 +547,63 @@ export class Uploader {
   // Tokens last ~1 hour. Try to renew quietly a few minutes early; if the
   // browser needs a tap for that, show a gentle prompt while uploads go on.
   _authTick() {
-    if (this.state !== 'running' || this._softAuthTried) return;
+    if (this.state !== 'running') return;
+    if (!isDemo && msLeft() < 12 * 60000) this._prefetchSessions();
+    if (this._softAuthTried) return;
     if (msLeft() < 6 * 60000) {
       this._softAuthTried = true;
       requestToken({ prompt: '', hint: this.email })
-        .then(() => (this._softAuthTried = false))
+        .then(() => {
+          this._softAuthTried = false;
+          this._authBlocked = false;
+          if (this.banner === 'auth') this.banner = null;
+          this._pump();
+        })
         .catch(() => {
           if (this.state === 'running') {
             this.banner = 'auth';
             this._emit();
           }
         });
+    }
+  }
+
+  // Before the token runs out, open upload sessions for files still waiting.
+  // A session URI stays valid for about a week and needs no token, so these
+  // files keep uploading after the token expires, even if the browser won't
+  // let us renew it without a tap. Nothing is created in Drive until a
+  // file's bytes have all arrived; cancelled sessions are deleted.
+  async _prefetchSessions() {
+    if (this._prefetching || !this._tokenOk()) return;
+    this._prefetching = true;
+    try {
+      for (let i = this._cursor; i < this.items.length; i++) {
+        if (this.state !== 'running' || !this._tokenOk()) break;
+        const it = this.items[i];
+        if (it.status !== 'waiting' || it.sessionUri || it.mute || !it.size) continue;
+        try {
+          const parentId = await this._resolveDir(it.relDir);
+          const uri = await this.drive.startResumable({
+            name: it.file.name,
+            parents: [parentId],
+            mimeType: it.file.type || undefined,
+            existingId: it.existingId,
+            size: it.size,
+          });
+          if (it.status !== 'waiting' || it.sessionUri) {
+            this.drive.cancelSession(uri);
+            continue;
+          }
+          it.sessionUri = uri;
+          it.offset = 0;
+          store.set(`s:${it.fp}`, { uri, total: it.size });
+        } catch (e) {
+          if (e?.kind === 'auth' || e?.kind === 'network') break;
+        }
+        await new Promise((r) => setTimeout(r, 250)); // stay well under Drive's write rate limits
+      }
+    } finally {
+      this._prefetching = false;
     }
   }
 
@@ -544,7 +623,41 @@ export class Uploader {
     this._lastSample = { t: now, sent: this.sentCounter };
     if (this.state !== 'running') return;
     this.speed = this.speed ? this.speed * 0.8 + inst * 0.2 : inst;
+    for (const it of this.active) {
+      const d = Math.max(0, (it.sent || 0) - (it._lastSent ?? it.sent ?? 0)) / dt;
+      it._lastSent = it.sent || 0;
+      it.speed = it.status === 'uploading' ? (it.speed ? it.speed * 0.7 + d * 0.3 : d) : 0;
+    }
+    this._adaptConcurrency(now);
     this._emit();
+  }
+
+  // Hill-climbing on measured throughput: try one more parallel upload; keep
+  // it if the total got faster, step back if it got slower. Only while there
+  // is a backlog of files waiting, otherwise there's nothing to learn.
+  _adaptConcurrency(now) {
+    const backlog = this.items.length - this._cursor > this.active.size;
+    if (!backlog) return (this._tune = null);
+    if (!this._tune) return (this._tune = { t: now, sent: this.sentCounter, last: 0, dir: 0, holds: 0 });
+    const tn = this._tune;
+    const dt = (now - tn.t) / 1000;
+    if (dt < 10) return;
+    const speed = (this.sentCounter - tn.sent) / dt;
+    tn.t = now;
+    tn.sent = this.sentCounter;
+    let step = 0;
+    if (!tn.last) step = 1;
+    else if (speed > tn.last * 1.05) step = tn.dir || 1; // the last step helped: keep going
+    else if (speed < tn.last * 0.9) step = -(tn.dir || 1); // it hurt: go back
+    else if (++tn.holds >= 6) step = 1; // steady for a minute: probe for more headroom
+    if (step) tn.holds = 0;
+    tn.dir = step;
+    tn.last = speed;
+    const next = Math.max(tuning.concurrencyMin, Math.min(tuning.concurrencyMax, this.slots + step));
+    if (next !== this.slots) {
+      this.slots = next;
+      this._pump();
+    }
   }
 
   _checkDone(force = false) {

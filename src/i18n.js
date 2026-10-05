@@ -20,6 +20,10 @@ const en = {
   tryDemo: 'Try the demo',
   signInFailed: 'Sign-in was not completed. Please try again.',
   popupBlocked: 'Your browser blocked the Google sign-in window. Allow pop-ups for this site and try again.',
+  inAppBrowser: 'Google doesn’t allow signing in from inside this app’s built-in browser. Open this page in Safari or Chrome (use the ⋯ menu → “Open in browser”), then sign in.',
+  iosTip: 'Tip for iPhone: choosing videos from “Photo Library” can take a while because iOS prepares a copy first. “Choose File” (Files app) is usually much faster.',
+  filesUploaded: '{done} / {total} files uploaded',
+  showMore: 'Show more',
   scopeMissing: 'Google Drive access was not granted. Please sign in again and allow access so files can be uploaded.',
 
   navUpload: 'Upload',
@@ -106,7 +110,7 @@ const en = {
   filterDone: 'Uploaded',
   filterFailed: 'Failed',
   emptyFilter: 'Nothing here right now.',
-  moreRows: 'Showing {shown} of {total}. Use the filters to find a file.',
+  moreRows: 'Showing {shown} of {total}.',
 
   st_waiting: 'Waiting',
   st_processing: 'Processing',
@@ -223,6 +227,10 @@ const ar = {
   tryDemo: 'جرّبي النسخة التجريبية',
   signInFailed: 'لم يكتمل تسجيل الدخول. حاولي مرة أخرى.',
   popupBlocked: 'منع المتصفح نافذة تسجيل الدخول. اسمحي بالنوافذ المنبثقة لهذا الموقع ثم حاولي مجددًا.',
+  inAppBrowser: 'لا تسمح Google بتسجيل الدخول من المتصفح المدمج داخل هذا التطبيق. افتحي الصفحة في Safari أو Chrome (من قائمة ⋯ ← «فتح في المتصفح») ثم سجّلي الدخول.',
+  iosTip: 'نصيحة لمستخدمات iPhone: اختيار الفيديوهات من «مكتبة الصور» قد يستغرق وقتًا لأن iOS يجهّز نسخة منها أولًا، أما «اختيار ملف» (تطبيق الملفات) فهو أسرع عادةً.',
+  filesUploaded: 'تم رفع {done} من {total} ملف',
+  showMore: 'عرض المزيد',
   scopeMissing: 'لم يُمنح إذن الوصول إلى Google Drive. سجّلي الدخول مجددًا واسمحي بالوصول ليتم رفع الملفات.',
 
   navUpload: 'الرفع',
@@ -308,7 +316,7 @@ const ar = {
   filterDone: 'تم رفعها',
   filterFailed: 'متعثرة',
   emptyFilter: 'لا شيء هنا حاليًا.',
-  moreRows: 'يظهر {shown} من {total}. استخدمي التصفية للعثور على ملف.',
+  moreRows: 'يظهر {shown} من {total}.',
 
   st_waiting: 'في الانتظار',
   st_processing: 'قيد المعالجة',
