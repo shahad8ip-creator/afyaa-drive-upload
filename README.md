@@ -43,7 +43,11 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
 - **Wake Lock** keeps phone screens awake during uploads. The browser warns before the user leaves the page mid-upload.
 - **Duplicate names.** The user chooses *new copy*, *replace* or *skip* for each file. Replace uploads a **new revision** of the existing file, and Drive keeps the previous version in its version history. Replace asks for a second confirmation and is only offered for files the app is allowed to edit.
 
-### Video muting (`src/mute.js`)
+### Instant muting for MP4 / MOV (`src/fastmute.js`)
+- Phone videos (MP4, MOV, M4V, 3GP) are muted in milliseconds without FFmpeg: only the `moov` index (a few MB at most) is read, every audio track box is renamed to `free` (same size, so no offsets move), and the audio bytes inside `mdat` are replaced with zeros so the sound is really gone. The output is stitched from lazy slices of the original file, so nothing is re-encoded or loaded into memory, there is no size limit, and an interrupted upload can resume after a reload.
+- Fragmented MP4, unusual sample tables or other formats fall back to FFmpeg below.
+
+### Video muting fallback (`src/mute.js`)
 - Uses FFmpeg compiled to WebAssembly, **served from this site's own origin** (no CDN).
 - Runs `-map 0:v -c copy -an`: the video stream is **copied bit for bit**. Nothing is re-encoded, so resolution, frame rate and quality stay exactly as they were. Only the audio track is dropped.
 - The input is read lazily from disk (WORKERFS). Only the muted output is held in memory until it is uploaded.
@@ -65,7 +69,7 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
 4. **Credentials → Create credentials → OAuth client ID → Web application**:
    - Authorised JavaScript origins: `https://your-domain.example` (plus `http://localhost:5173` for development).
    - **Authorised redirect URIs** (required for sign-in): the exact address of the app's page, **with the trailing slash**, for example
-     `https://shahad8ip-creator.github.io/afyaa-drive-upload/` and `http://localhost:5173/`. Google sends the user back to this address after sign-in. The app computes it from the current page, so production and development each return to themselves.
+     `https://afeiaaseer.netlify.app/` and `http://localhost:5173/`. Google sends the user back to this address after sign-in. The app computes it from the current page, so production and development each return to themselves.
    - The app does not use a client secret.
 5. **Credentials → Create credentials → API key** (used by the Picker):
    - Restrict it to **HTTP referrers**: `https://your-domain.example/*` (and `http://localhost:5173/*`).
@@ -95,9 +99,11 @@ npm run build
 With no client ID configured, the app runs in **demo mode**. Sign-in and Drive are simulated, including random server errors and a "simulate connection loss" switch under *Advanced*, so the full interface can be tried without a Google account.
 
 ### 3. Deploy (free)
-Deploy the `dist/` folder to any static host with HTTPS:
-- **Cloudflare Pages** or **Netlify**: build command `npm run build`, output `dist`. The security headers in `public/_headers` (CSP, HSTS, COOP, nosniff, Permissions-Policy) are applied automatically.
-- **Firebase Hosting / others**: copy the headers from `public/_headers` into that host's config.
+The site is hosted on **Netlify** at <https://afeiaaseer.netlify.app/>, connected to this GitHub repository: every merge into `main` is built and published automatically using `netlify.toml` (`npm run build` → `dist`). The security headers in `public/_headers` (CSP, HSTS, COOP, `frame-ancestors`, nosniff, Permissions-Policy) are applied by Netlify.
+
+In Netlify → *Site configuration → Environment variables*, set `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` and `VITE_GOOGLE_APP_ID` (optionally `VITE_GOOGLE_SIGNIN`). Without them the build runs in demo mode.
+
+Other static hosts with HTTPS also work (Cloudflare Pages reads `public/_headers` too); GitHub Pages is not recommended because it can't send these headers.
 
 Add the final domain to the OAuth client's authorised origins and to the API key's referrer list.
 
@@ -119,7 +125,8 @@ src/config.js       env config, scopes, performance tuning
 src/auth.js         OAuth redirect sign-in + GIS pop-up renewal (tab-scoped token)
 src/drive.js        Drive REST: resumable/multipart uploads, folders, appData
 src/uploader.js     queue, concurrency, retries, offline, pause/cancel
-src/mute.js         on-device audio removal with FFmpeg.wasm
+src/fastmute.js     instant MP4/MOV audio removal (no re-encode, no memory)
+src/mute.js         FFmpeg.wasm fallback for other video formats
 src/picker.js       Google Picker folder selection
 src/history.js      per-user history in Drive appDataFolder
 src/store.js        per-account IndexedDB resume records (7-day expiry)

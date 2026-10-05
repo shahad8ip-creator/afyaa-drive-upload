@@ -5,6 +5,7 @@ import { realDrive, FOLDER_MIME } from './drive.js';
 import { mockDrive, sim } from './mock.js';
 import { preloadPicker, pickFolder } from './picker.js';
 import { preloadMuter } from './mute.js';
+import { FAST_MUTE_EXT } from './fastmute.js';
 import { store, setNamespace, fingerprint } from './store.js';
 import { Uploader, FINAL } from './uploader.js';
 import { createHistory } from './history.js';
@@ -166,6 +167,7 @@ async function enterApp() {
   route();
   await restoreFolder();
   showResumeNotice();
+  checkPickerReload();
   renderSelection();
   renderNow();
 }
@@ -487,14 +489,74 @@ function relDirOf(path) {
   return parts.join('/');
 }
 
-$('file-input').addEventListener('change', (e) => {
-  addFiles([...e.target.files].map((file) => ({ file, relDir: '' })));
-  e.target.value = '';
+// iPhone/iPad hand the page temporary copies of the chosen photos and videos
+// that belong to the <input>. Clearing input.value (the usual trick to allow
+// picking the same files again) can throw those copies away, and with several
+// files iOS may also deliver them a moment after the event. So: never clear
+// the input; swap in a fresh one for the next pick and keep the used one
+// (detached, files intact) until the batch is cleared. Listen to both
+// "change" and "input", and re-check briefly if the list arrives empty.
+const usedInputs = [];
+const takenInputs = new WeakSet();
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+const PICKING = 'afyaa:picking';
+
+function markPicking(on) {
+  try {
+    if (on) sessionStorage.setItem(PICKING, String(Date.now()));
+    else sessionStorage.removeItem(PICKING);
+  } catch {}
+}
+
+function takeFiles(input, attempt = 0) {
+  if (takenInputs.has(input)) return;
+  const files = [...(input.files || [])];
+  if (!files.length) {
+    const waits = [300, 800, 1500, 3000];
+    if (attempt < waits.length) return setTimeout(() => takeFiles(input, attempt + 1), waits[attempt]);
+    markPicking(false);
+    return showSelectionNote('noFilesReceived');
+  }
+  takenInputs.add(input);
+  markPicking(false);
+  const folder = input.id === 'folder-input';
+  addFiles(files.map((file) => ({ file, relDir: folder ? relDirOf(file.webkitRelativePath) : '' })));
+  // A new element with the same attributes (cloneNode would copy the files too).
+  const fresh = document.createElement('input');
+  for (const a of input.attributes) fresh.setAttribute(a.name, a.value);
+  input.replaceWith(fresh);
+  usedInputs.push(input);
+}
+
+for (const ev of ['change', 'input']) {
+  document.addEventListener(ev, (e) => {
+    if (e.target?.matches?.('#file-input, #folder-input')) takeFiles(e.target);
+  });
+}
+// The picker was closed without choosing anything.
+document.addEventListener('cancel', (e) => e.target?.matches?.('#file-input, #folder-input') && markPicking(false), true);
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('label[for="file-input"], label[for="folder-input"]')) markPicking(true);
 });
-$('folder-input').addEventListener('change', (e) => {
-  addFiles([...e.target.files].map((file) => ({ file, relDir: relDirOf(file.webkitRelativePath) })));
-  e.target.value = '';
-});
+
+function showSelectionNote(key) {
+  $('selection-bar').hidden = false;
+  $('selection-summary').textContent = t(key);
+}
+
+// On iPhone, preparing many or large videos can use so much memory that iOS
+// reloads the page and the selection is lost. Tell the user what happened
+// instead of silently showing an empty list.
+function checkPickerReload() {
+  let at = 0;
+  try {
+    at = Number(sessionStorage.getItem(PICKING)) || 0;
+  } catch {}
+  markPicking(false);
+  if (!isIOS || !at || Date.now() - at > 10 * 60000) return;
+  $('resume-text').textContent = t('pickerReloaded');
+  $('resume-notice').hidden = false;
+}
 
 const dz = $('dropzone');
 const dirSupported =
@@ -505,7 +567,7 @@ $('btn-choose-folder').hidden = !dirSupported;
 // iPhone/iPad: picking from the Photos library makes iOS prepare (and often
 // convert) a copy of each video before the page gets it, which is slow for
 // big videos. Picking via "Choose File" (the Files app) skips that step.
-$('ios-tip').hidden = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
+$('ios-tip').hidden = !isIOS;
 
 // The "Choose files" / "Choose a folder" buttons are <label for=…> elements,
 // so the browser opens its own file picker natively (Finder, File Explorer,
@@ -513,6 +575,7 @@ $('ios-tip').hidden = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigat
 // rest of the drop zone opens the same picker.
 function openPicker(input) {
   if (selectionLocked()) return;
+  markPicking(true);
   try {
     if (input.showPicker) return input.showPicker();
   } catch {}
@@ -595,6 +658,7 @@ $('btn-clear').addEventListener('click', () => {
 
 function resetBatch() {
   S.items = [];
+  usedInputs.length = 0;
   if (S.uploader) {
     S.uploader.items = [];
     S.uploader.state = 'idle';
@@ -617,8 +681,9 @@ function renderSelection() {
     n === 1 ? t('selectedOne', { size: fmtBytes(bytes) }) : t('selectedSummary', { count: fmtNum(n), size: fmtBytes(bytes) });
   $('step-files').classList.toggle('is-done', n > 0);
   const videos = S.items.filter((i) => i.kind === 'video').length;
-  // The ~30 MB FFmpeg engine is only fetched once muting is on AND there is a video to mute.
-  if ($('opt-mute').checked && videos) preloadMuter();
+  // The ~30 MB FFmpeg engine is only fetched once muting is on AND there is a
+  // video that the instant MP4/MOV method can't handle.
+  if ($('opt-mute').checked && S.items.some((i) => i.kind === 'video' && !FAST_MUTE_EXT.test(i.file.name))) preloadMuter();
   $('mute-count').hidden = !($('opt-mute').checked && videos);
   $('mute-count').textContent = t('optMuteVideos', { count: fmtNum(videos) });
   renderStartButton();
@@ -687,7 +752,8 @@ async function preflight() {
   // 2) Mute decisions — never silently send a video elsewhere for processing.
   const mute = $('opt-mute').checked;
   for (const it of S.items) it.mute = mute && it.kind === 'video';
-  const tooBig = S.items.filter((i) => i.mute && i.size > tuning.muteMaxBytes);
+  // MP4/MOV are muted without loading them into memory, so no size limit.
+  const tooBig = S.items.filter((i) => i.mute && i.size > tuning.muteMaxBytes && !FAST_MUTE_EXT.test(i.file.name));
   if (tooBig.length) {
     const choice = await bigVideoDialog(tooBig);
     if (choice === 'cancel') return false;
