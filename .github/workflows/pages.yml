@@ -16,7 +16,9 @@ concurrency:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # GitHub's servers by default. Set the repository variable RUNNER to a
+    # self-hosted runner label (e.g. afyaa-mac) to build on your own machine.
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
