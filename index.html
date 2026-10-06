@@ -171,19 +171,10 @@
 
         <div class="meter-wrap">
           <figure class="meter" aria-hidden="true">
-            <svg viewBox="0 0 120 150">
-              <defs>
-                <clipPath id="drop-clip"><path d="M60 6C60 6 14 64 14 98a46 46 0 0 0 92 0C106 64 60 6 60 6Z"/></clipPath>
-              </defs>
-              <path class="meter-bg" d="M60 6C60 6 14 64 14 98a46 46 0 0 0 92 0C106 64 60 6 60 6Z"/>
-              <g clip-path="url(#drop-clip)">
-                <g id="meter-water" class="meter-water">
-                  <path class="wave wave-back" d="M-120 0 q15 -6 30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 V160 H-120 Z"/>
-                  <path class="wave wave-front" d="M-120 2 q15 -5 30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 t30 0 V160 H-120 Z"/>
-                </g>
-              </g>
-              <path class="meter-outline" d="M60 6C60 6 14 64 14 98a46 46 0 0 0 92 0C106 64 60 6 60 6Z"/>
-            </svg>
+            <div class="meter-logo">
+              <img class="meter-grey" src="brand/mark.png" width="256" height="381" alt="" />
+              <img class="meter-color" id="meter-color" src="brand/mark.png" width="256" height="381" alt="" />
+            </div>
             <figcaption class="meter-pct"><span id="pct-num">0</span><span class="pct-sign">%</span></figcaption>
           </figure>
           <div class="meter-side">

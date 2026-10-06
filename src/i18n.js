@@ -241,7 +241,7 @@ const ar = {
   noFolder: 'اختاري المكان الذي ستُرفع إليه ملفاتك.',
   selectFolder: 'اختيار مجلد من Google Drive',
   changeFolder: 'تغيير المجلد',
-  myDrive: 'ملفاتي (My Drive)',
+  myDrive: 'ملفاتي في درايف',
   useMyDrive: 'الرفع إلى ملفاتي',
   newFolder: 'مجلد جديد',
   newFolderPrompt: 'اسم المجلد الجديد',

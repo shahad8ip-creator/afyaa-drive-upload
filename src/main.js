@@ -911,12 +911,9 @@ function renderNow() {
 
   const s = started ? u.stats() : previewStats(items);
   const pct = Math.floor(s.progress * 100);
-  const water = $('meter-water');
-  // Drop interior spans y≈6..144 in the SVG; raise the water line with progress.
-  const y = s.progress >= 1 ? -6 : 144 - s.progress * 136;
-  water.style.transform = `translateY(${y}px)`;
+  // Reveal the coloured logo from the bottom: 50% progress = bottom half in colour.
+  $('meter-color').style.clipPath = `inset(${(1 - s.progress) * 100}% 0 0 0)`;
   $('pct-num').textContent = fmtNum(pct);
-  document.querySelector('.meter').classList.toggle('is-high', s.progress > 0.62);
   $('overall-fill').style.width = `${s.progress * 100}%`;
   $('overall-bar').setAttribute('aria-valuenow', String(pct));
   $('overall-bar').setAttribute('aria-label', t('overall'));
