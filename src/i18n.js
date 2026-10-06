@@ -23,6 +23,8 @@ const en = {
   inAppBrowser: 'Google doesn’t allow signing in from inside this app’s built-in browser. Open this page in Safari or Chrome (use the ⋯ menu → “Open in browser”), then sign in.',
   iosTip: 'Tip for iPhone: choosing videos from “Photo Library” can take a while because iOS prepares a copy first. “Choose File” (Files app) is usually much faster.',
   filesUploaded: '{done} / {total} files uploaded',
+  noFilesReceived: 'The selected files didn’t reach the page. Please try again, or choose fewer files at a time.',
+  pickerReloaded: 'Your iPhone reloaded this page while preparing the selected files (this happens with many or very large videos, because iOS makes a copy of each one first). Please choose fewer files at a time, or pick them from “Choose File” (Files app) instead of the Photo Library.',
   showMore: 'Show more',
   scopeMissing: 'Google Drive access was not granted. Please sign in again and allow access so files can be uploaded.',
 
@@ -230,6 +232,8 @@ const ar = {
   inAppBrowser: 'لا تسمح Google بتسجيل الدخول من المتصفح المدمج داخل هذا التطبيق. افتحي الصفحة في Safari أو Chrome (من قائمة ⋯ ← «فتح في المتصفح») ثم سجّلي الدخول.',
   iosTip: 'نصيحة لمستخدمات iPhone: اختيار الفيديوهات من «مكتبة الصور» قد يستغرق وقتًا لأن iOS يجهّز نسخة منها أولًا، أما «اختيار ملف» (تطبيق الملفات) فهو أسرع عادةً.',
   filesUploaded: 'تم رفع {done} من {total} ملف',
+  noFilesReceived: 'لم تصل الملفات المختارة إلى الصفحة. حاولي مرة أخرى، أو اختاري عددًا أقل في كل مرة.',
+  pickerReloaded: 'أعاد iPhone تحميل الصفحة أثناء تجهيز الملفات المختارة (يحدث هذا مع الفيديوهات الكثيرة أو الكبيرة جدًا لأن iOS يجهّز نسخة من كل ملف أولًا). اختاري عددًا أقل في كل مرة، أو اختاري الملفات من «اختيار ملف» (تطبيق الملفات) بدل «مكتبة الصور».',
   showMore: 'عرض المزيد',
   scopeMissing: 'لم يُمنح إذن الوصول إلى Google Drive. سجّلي الدخول مجددًا واسمحي بالوصول ليتم رفع الملفات.',
 
