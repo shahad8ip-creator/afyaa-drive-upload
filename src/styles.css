@@ -205,6 +205,9 @@ html[lang='ar'] .landing-title { display: none; } /* the Arabic line above alrea
   display: flex; align-items: center; justify-content: center; gap: 8px;
   padding: 18px 16px calc(18px + env(safe-area-inset-bottom)); color: var(--muted); font-size: 0.8rem; text-align: center;
 }
+.footer a, .privacy-link { color: var(--muted); font-size: 0.8rem; }
+.privacy-link { margin-top: 22px; }
+.footer { flex-wrap: wrap; }
 .footer img { width: 10px; height: auto; opacity: .8; }
 
 /* ---------- Setup column ---------- */

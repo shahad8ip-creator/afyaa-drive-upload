@@ -194,6 +194,7 @@ const en = {
   clearHistory: 'Clear history',
   clearHistoryConfirm: 'Clear your upload history? Your files in Google Drive are not affected.',
 
+  privacyLink: 'Privacy policy',
   footerPrivacy: 'Your files go directly to your Google Drive. Nothing is stored on our servers.',
   debugToggle: 'Advanced: connection details',
   simulateOffline: 'Simulate connection loss (demo)',
@@ -394,6 +395,7 @@ const ar = {
   clearHistory: 'مسح السجل',
   clearHistoryConfirm: 'مسح سجل الرفع؟ لن تتأثر ملفاتك في Google Drive.',
 
+  privacyLink: 'سياسة الخصوصية',
   footerPrivacy: 'تذهب ملفاتك مباشرة إلى Google Drive الخاص بك، ولا يُحفظ شيء على خوادمنا.',
   debugToggle: 'متقدم: تفاصيل الاتصال',
   simulateOffline: 'محاكاة انقطاع الاتصال (تجربة)',
