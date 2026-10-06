@@ -1,0 +1,10 @@
+# Netlify builds and publishes the site on every push to main.
+# Set VITE_GOOGLE_CLIENT_ID, VITE_GOOGLE_API_KEY and VITE_GOOGLE_APP_ID under
+# Site configuration → Environment variables (see README). Security and cache
+# headers come from public/_headers.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

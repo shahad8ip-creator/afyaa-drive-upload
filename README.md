@@ -69,7 +69,7 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
 4. **Credentials → Create credentials → OAuth client ID → Web application**:
    - Authorised JavaScript origins: `https://your-domain.example` (plus `http://localhost:5173` for development).
    - **Authorised redirect URIs** (required for sign-in): the exact address of the app's page, **with the trailing slash**, for example
-     `https://shahad8ip-creator.github.io/afyaa-drive-upload/` and `http://localhost:5173/`. Google sends the user back to this address after sign-in. The app computes it from the current page, so production and development each return to themselves.
+     `https://afeiaaseer.netlify.app/` and `http://localhost:5173/`. Google sends the user back to this address after sign-in. The app computes it from the current page, so production and development each return to themselves.
    - The app does not use a client secret.
 5. **Credentials → Create credentials → API key** (used by the Picker):
    - Restrict it to **HTTP referrers**: `https://your-domain.example/*` (and `http://localhost:5173/*`).
@@ -99,9 +99,11 @@ npm run build
 With no client ID configured, the app runs in **demo mode**. Sign-in and Drive are simulated, including random server errors and a "simulate connection loss" switch under *Advanced*, so the full interface can be tried without a Google account.
 
 ### 3. Deploy (free)
-Deploy the `dist/` folder to any static host with HTTPS:
-- **Cloudflare Pages** or **Netlify**: build command `npm run build`, output `dist`. The security headers in `public/_headers` (CSP, HSTS, COOP, nosniff, Permissions-Policy) are applied automatically.
-- **Firebase Hosting / others**: copy the headers from `public/_headers` into that host's config.
+The site is hosted on **Netlify** at <https://afeiaaseer.netlify.app/>, connected to this GitHub repository: every merge into `main` is built and published automatically using `netlify.toml` (`npm run build` → `dist`). The security headers in `public/_headers` (CSP, HSTS, COOP, `frame-ancestors`, nosniff, Permissions-Policy) are applied by Netlify.
+
+In Netlify → *Site configuration → Environment variables*, set `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` and `VITE_GOOGLE_APP_ID` (optionally `VITE_GOOGLE_SIGNIN`). Without them the build runs in demo mode.
+
+Other static hosts with HTTPS also work (Cloudflare Pages reads `public/_headers` too); GitHub Pages is not recommended because it can't send these headers.
 
 Add the final domain to the OAuth client's authorised origins and to the API key's referrer list.
 
