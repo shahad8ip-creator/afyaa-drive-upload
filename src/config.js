@@ -65,6 +65,9 @@ export const tuning = {
   muteMaxBytes: (coarse ? 450 : 1536) * 1024 * 1024,
   // Combined size of muted videos allowed to wait in memory at once.
   muteMemoryBudget: (coarse ? 500 : 2048) * 1024 * 1024,
+  // Phones/tablets keep a temporary on-device copy of each unfinished file,
+  // so an upload survives iOS closing the page in the background.
+  keepCopies: coarse,
   maxNetworkRetries: 12,
   maxServerRetries: 8,
 };

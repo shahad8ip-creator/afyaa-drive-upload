@@ -165,8 +165,10 @@ async function enterApp() {
   renderUser();
   route();
   await restoreFolder();
-  showResumeNotice();
-  checkPickerReload();
+  if (!(await resumeFromCopies())) {
+    showResumeNotice();
+    checkPickerReload();
+  }
   renderSelection();
   renderNow();
 }
@@ -243,6 +245,9 @@ $('btn-signout').addEventListener('click', async () => {
   try {
     localStorage.removeItem('hint'); // don't suggest this account to the next person on a shared device
   } catch {}
+  S.uploader?.destroy();
+  await store.clearFiles(); // no copies of this person's files stay on a shared device
+  store.del('batch');
   leaveApp();
 });
 
@@ -1015,6 +1020,54 @@ function onBatchDone(summary) {
   releaseWakeLock();
   if (summary.files > 0) S.history?.save(summary);
   markDirty();
+}
+
+// After iOS closed and reloaded the page mid-upload: rebuild the queue from
+// the on-device copies and carry on by itself, from the last byte Drive has
+// for each file. Returns true if it took over.
+async function resumeFromCopies() {
+  const b = await store.get('batch');
+  if (!b?.items?.length || S.items.length) return false;
+  const items = [];
+  let missing = 0;
+  // The saved list is updated the moment each file finishes, so it holds
+  // only unfinished files. A file that was mid-upload resumes on its Drive
+  // session, which reports "already complete" instead of uploading twice.
+  for (const m of b.items) {
+    const file = m.stored ? await store.getFile(m.fp) : null;
+    if (!file || file.size !== m.size) {
+      missing++;
+      continue;
+    }
+    items.push({
+      id: nextId++,
+      file,
+      relDir: m.relDir,
+      size: file.size,
+      kind: m.kind || kindOf(file),
+      status: 'waiting',
+      sent: 0,
+      uploadSize: 0,
+      attempts: 0,
+      mute: !!m.mute,
+      existingId: m.existingId || undefined,
+      stored: true,
+    });
+  }
+  if (!items.length) return false;
+  const folder = { id: b.folderId, name: b.folderName };
+  setFolder(folder);
+  $('opt-mute').checked = !!b.mute;
+  $('opt-resume').checked = b.autoResume !== false;
+  S.items = items;
+  requestWakeLock();
+  S.uploader.start(items, folder, { autoResume: b.autoResume !== false });
+  let text = t('resumedAuto', { count: fmtNum(items.length) });
+  if (missing) text += ` ${t('resumeMissing', { count: fmtNum(missing) })}`;
+  $('resume-text').textContent = text;
+  $('btn-resume-select').hidden = true;
+  $('resume-notice').hidden = false;
+  return true;
 }
 
 function showResumeNotice() {
