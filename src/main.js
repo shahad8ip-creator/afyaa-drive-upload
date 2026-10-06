@@ -5,6 +5,7 @@ import { realDrive, FOLDER_MIME } from './drive.js';
 import { mockDrive, sim } from './mock.js';
 import { preloadPicker, pickFolder } from './picker.js';
 import { preloadMuter } from './mute.js';
+import { FAST_MUTE_EXT } from './fastmute.js';
 import { store, setNamespace, fingerprint } from './store.js';
 import { Uploader, FINAL } from './uploader.js';
 import { createHistory } from './history.js';
@@ -680,8 +681,9 @@ function renderSelection() {
     n === 1 ? t('selectedOne', { size: fmtBytes(bytes) }) : t('selectedSummary', { count: fmtNum(n), size: fmtBytes(bytes) });
   $('step-files').classList.toggle('is-done', n > 0);
   const videos = S.items.filter((i) => i.kind === 'video').length;
-  // The ~30 MB FFmpeg engine is only fetched once muting is on AND there is a video to mute.
-  if ($('opt-mute').checked && videos) preloadMuter();
+  // The ~30 MB FFmpeg engine is only fetched once muting is on AND there is a
+  // video that the instant MP4/MOV method can't handle.
+  if ($('opt-mute').checked && S.items.some((i) => i.kind === 'video' && !FAST_MUTE_EXT.test(i.file.name))) preloadMuter();
   $('mute-count').hidden = !($('opt-mute').checked && videos);
   $('mute-count').textContent = t('optMuteVideos', { count: fmtNum(videos) });
   renderStartButton();
@@ -750,7 +752,8 @@ async function preflight() {
   // 2) Mute decisions — never silently send a video elsewhere for processing.
   const mute = $('opt-mute').checked;
   for (const it of S.items) it.mute = mute && it.kind === 'video';
-  const tooBig = S.items.filter((i) => i.mute && i.size > tuning.muteMaxBytes);
+  // MP4/MOV are muted without loading them into memory, so no size limit.
+  const tooBig = S.items.filter((i) => i.mute && i.size > tuning.muteMaxBytes && !FAST_MUTE_EXT.test(i.file.name));
   if (tooBig.length) {
     const choice = await bigVideoDialog(tooBig);
     if (choice === 'cancel') return false;

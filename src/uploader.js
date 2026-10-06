@@ -6,6 +6,7 @@ import { tuning, isDemo } from './config.js';
 import { msLeft, requestToken } from './auth.js';
 import { DriveError } from './drive.js';
 import { muteVideo, abortMute, MuteError } from './mute.js';
+import { fastMute } from './fastmute.js';
 import { store, fingerprint } from './store.js';
 
 export const FINAL = new Set(['uploaded', 'failed', 'cancelled', 'skipped']);
@@ -268,16 +269,25 @@ export class Uploader {
         it.muteProgress = 0;
         this._emit();
         try {
-          const out = await muteVideo(it.file, {
-            onProgress: (p) => {
-              it.muteProgress = p;
-              this._emit();
-            },
-          });
+          // MP4/MOV (phone videos): drop the audio track in milliseconds,
+          // streaming from disk. Other formats, or anything unusual: FFmpeg.
+          let out = await fastMute(it.file);
+          if (out) {
+            it.muteFast = true;
+          } else {
+            if (it.size > tuning.muteMaxBytes) throw new MuteError('too large for in-browser processing');
+            out = await muteVideo(it.file, {
+              onProgress: (p) => {
+                it.muteProgress = p;
+                this._emit();
+              },
+            });
+            it.heldSize = out.size; // FFmpeg output lives in memory until uploaded
+            this.heldBytes += out.size;
+          }
           if (it.cancelRequested) return;
           it.blob = out;
           it.muted = true;
-          this.heldBytes += out.size;
         } finally {
           this.muteBusy = false;
         }
@@ -328,7 +338,9 @@ export class Uploader {
 
   async _resumable(it, src, meta, signal) {
     const total = src.size;
-    const resumable = !it.muted; // muted output is regenerated, so its session can't outlive the page
+    // FFmpeg output is regenerated after a reload, so its session can't outlive
+    // the page; the fast-mute output is byte-for-byte reproducible, so it can.
+    const resumable = !it.muted || it.muteFast;
     if (!it.sessionUri && resumable) {
       const saved = await store.get(`s:${it.fp}`);
       if (saved?.uri && saved.total === total) it.sessionUri = saved.uri;
@@ -611,7 +623,8 @@ export class Uploader {
 
   _release(it) {
     if (it.blob) {
-      this.heldBytes = Math.max(0, this.heldBytes - it.blob.size);
+      this.heldBytes = Math.max(0, this.heldBytes - (it.heldSize || 0));
+      it.heldSize = 0;
       it.blob = null;
     }
   }

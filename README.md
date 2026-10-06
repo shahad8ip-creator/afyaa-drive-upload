@@ -43,7 +43,11 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
 - **Wake Lock** keeps phone screens awake during uploads. The browser warns before the user leaves the page mid-upload.
 - **Duplicate names.** The user chooses *new copy*, *replace* or *skip* for each file. Replace uploads a **new revision** of the existing file, and Drive keeps the previous version in its version history. Replace asks for a second confirmation and is only offered for files the app is allowed to edit.
 
-### Video muting (`src/mute.js`)
+### Instant muting for MP4 / MOV (`src/fastmute.js`)
+- Phone videos (MP4, MOV, M4V, 3GP) are muted in milliseconds without FFmpeg: only the `moov` index (a few MB at most) is read, every audio track box is renamed to `free` (same size, so no offsets move), and the audio bytes inside `mdat` are replaced with zeros so the sound is really gone. The output is stitched from lazy slices of the original file, so nothing is re-encoded or loaded into memory, there is no size limit, and an interrupted upload can resume after a reload.
+- Fragmented MP4, unusual sample tables or other formats fall back to FFmpeg below.
+
+### Video muting fallback (`src/mute.js`)
 - Uses FFmpeg compiled to WebAssembly, **served from this site's own origin** (no CDN).
 - Runs `-map 0:v -c copy -an`: the video stream is **copied bit for bit**. Nothing is re-encoded, so resolution, frame rate and quality stay exactly as they were. Only the audio track is dropped.
 - The input is read lazily from disk (WORKERFS). Only the muted output is held in memory until it is uploaded.
@@ -119,7 +123,8 @@ src/config.js       env config, scopes, performance tuning
 src/auth.js         OAuth redirect sign-in + GIS pop-up renewal (tab-scoped token)
 src/drive.js        Drive REST: resumable/multipart uploads, folders, appData
 src/uploader.js     queue, concurrency, retries, offline, pause/cancel
-src/mute.js         on-device audio removal with FFmpeg.wasm
+src/fastmute.js     instant MP4/MOV audio removal (no re-encode, no memory)
+src/mute.js         FFmpeg.wasm fallback for other video formats
 src/picker.js       Google Picker folder selection
 src/history.js      per-user history in Drive appDataFolder
 src/store.js        per-account IndexedDB resume records (7-day expiry)
