@@ -1,6 +1,6 @@
-import { isDemo, tuning } from './config.js';
+import { config, isDemo, tuning } from './config.js';
 import { t, getLang, setLang, applyDocumentLang, fmtBytes, fmtNum, fmtDuration, fmtDate } from './i18n.js';
-import { preloadAuth, requestToken, signOutLocal, revokeAccess, msLeft } from './auth.js';
+import { preloadAuth, requestToken, signInWithRedirect, completeRedirect, hasToken, signOutLocal, revokeAccess, msLeft } from './auth.js';
 import { realDrive, FOLDER_MIME } from './drive.js';
 import { mockDrive, sim } from './mock.js';
 import { preloadPicker, pickFolder } from './picker.js';
@@ -88,28 +88,49 @@ function showSignInError(code) {
   const el = $('signin-error');
   if (!code || code === 'superseded') return (el.hidden = true);
   el.textContent =
-    code === 'popup_failed_to_open' ? t('popupBlocked') : code === 'scope' ? t('scopeMissing') : t('signInFailed');
+    code === 'popup_failed_to_open'
+      ? t('popupBlocked')
+      : code === 'scope'
+        ? t('scopeMissing')
+        : code === 'inapp'
+          ? t('inAppBrowser')
+          : t('signInFailed');
   el.hidden = false;
 }
 
+// Google refuses to sign in inside the built-in browsers of social apps
+// (Instagram, Facebook, Snapchat, TikTok…), so say so before the user tries.
+const inAppBrowser = /FBAN|FBAV|FB_IAB|Instagram|Snapchat|TikTok|musical_ly|BytedanceWebview|Line\/|Twitter/i.test(navigator.userAgent);
+
 function signIn(prompt) {
-  // requestToken must run synchronously inside the click for pop-up permission.
-  const hint = prompt === 'select_account' ? '' : lastHint();
-  let p;
-  try {
-    p = requestToken({ prompt: prompt ?? (hint ? '' : 'select_account'), hint });
-  } catch (e) {
-    p = Promise.reject(e);
-  }
-  $('btn-signin').disabled = true;
   showSignInError(null);
-  p.then(enterApp)
-    .catch((e) => showSignInError(e?.code || 'unknown'))
-    .finally(() => ($('btn-signin').disabled = false));
+  if (isDemo || config.signInMode === 'popup') {
+    // Pop-up mode: requestToken must run synchronously inside the click.
+    const hint = prompt === 'select_account' ? '' : lastHint();
+    requestToken({ prompt: prompt ?? (hint ? '' : 'select_account'), hint })
+      .then(enterApp)
+      .catch((e) => showSignInError(e?.code || 'unknown'));
+    return;
+  }
+  // Full-page redirect to Google; Google brings the user straight back here
+  // and boot() opens the upload dashboard.
+  const hint = prompt === 'select_account' ? '' : lastHint();
+  $('btn-signin').disabled = true;
+  $('signin-label').textContent = t('signingIn');
+  signInWithRedirect({ prompt: prompt ?? (hint ? '' : 'select_account'), hint });
 }
 
 $('btn-signin').addEventListener('click', () => signIn());
 $('btn-other-account').addEventListener('click', () => signIn('select_account'));
+
+// Coming back to a page restored from the back/forward cache (e.g. the user
+// pressed Back on Google's page) must not leave the button stuck.
+addEventListener('pageshow', (e) => {
+  if (e.persisted && !S.user) {
+    $('btn-signin').disabled = false;
+    renderLandingButton();
+  }
+});
 
 async function sha(text) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
@@ -117,7 +138,15 @@ async function sha(text) {
 }
 
 async function enterApp() {
-  const user = await drive.about();
+  let user;
+  try {
+    user = await drive.about();
+  } catch (e) {
+    // A saved token that Google no longer accepts: just show the sign-in page.
+    signOutLocal();
+    showLanding(e?.kind === 'auth' ? null : 'unknown');
+    return;
+  }
   S.user = user;
   // Every locally-saved key is scoped to this account, hashed.
   S.userKey = await sha(`afyaa:${user.permissionId || user.emailAddress}`);
@@ -129,6 +158,7 @@ async function enterApp() {
   S.uploader = new Uploader(drive, { email: user.emailAddress, onUpdate: markDirty, onDone: onBatchDone });
   if (!isDemo) preloadPicker().catch(() => {});
 
+  $('boot').hidden = true;
   $('landing').hidden = true;
   $('app').hidden = false;
   $('sim-offline-wrap').hidden = !isDemo;
@@ -194,8 +224,15 @@ async function leaveApp() {
   $('file-list').replaceChildren();
   lastVisibleKey = '';
   $('app').hidden = true;
+  showLanding();
+}
+
+function showLanding(errorCode) {
+  $('boot').hidden = true;
   $('landing').hidden = false;
+  $('btn-signin').disabled = false;
   renderLandingButton();
+  showSignInError(errorCode || (inAppBrowser && !isDemo ? 'inapp' : null));
 }
 
 $('btn-signout').addEventListener('click', async () => {
@@ -465,17 +502,40 @@ const dirSupported =
   !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent) &&
   !(navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 $('btn-choose-folder').hidden = !dirSupported;
+// iPhone/iPad: picking from the Photos library makes iOS prepare (and often
+// convert) a copy of each video before the page gets it, which is slow for
+// big videos. Picking via "Choose File" (the Files app) skips that step.
+$('ios-tip').hidden = !(/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)));
 
+// The "Choose files" / "Choose a folder" buttons are <label for=…> elements,
+// so the browser opens its own file picker natively (Finder, File Explorer,
+// iOS/Android pickers) without depending on a scripted click. A click on the
+// rest of the drop zone opens the same picker.
+function openPicker(input) {
+  if (selectionLocked()) return;
+  try {
+    if (input.showPicker) return input.showPicker();
+  } catch {}
+  input.click();
+}
 dz.addEventListener('click', (e) => {
-  if (e.target.closest('#btn-choose-folder')) return $('folder-input').click();
-  $('file-input').click();
+  if (e.target.closest('label, input')) return; // the label already opens the picker
+  openPicker($('file-input'));
 });
 dz.addEventListener('keydown', (e) => {
   if (e.target === dz && (e.key === 'Enter' || e.key === ' ')) {
     e.preventDefault();
-    $('file-input').click();
+    openPicker($('file-input'));
   }
 });
+for (const label of document.querySelectorAll('label.btn[for]')) {
+  label.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openPicker($(label.htmlFor));
+    }
+  });
+}
 for (const ev of ['dragenter', 'dragover']) {
   dz.addEventListener(ev, (e) => {
     e.preventDefault();
@@ -494,18 +554,19 @@ dz.addEventListener('drop', async (e) => {
   if (!entries.length) return addFiles([...e.dataTransfer.files].map((file) => ({ file, relDir: '' })));
   const out = [];
   let count = 0;
+  // Only file references are collected here; no file contents are read.
   const walk = async (entry, dir) => {
     if (entry.isFile) {
       const file = await new Promise((res, rej) => entry.file(res, rej)).catch(() => null);
       if (file) out.push({ file, relDir: dir });
-      if (++count % 50 === 0) $('selection-summary').textContent = t('readingFolder', { count: fmtNum(count) });
+      if (++count % 200 === 0) $('selection-summary').textContent = t('readingFolder', { count: fmtNum(count) });
     } else if (entry.isDirectory) {
       const reader = entry.createReader();
       const sub = dir ? `${dir}/${entry.name}` : entry.name;
       for (;;) {
         const batch = await new Promise((res) => reader.readEntries(res, () => res([])));
         if (!batch.length) break;
-        for (const child of batch) await walk(child, sub);
+        await Promise.all(batch.map((child) => walk(child, sub)));
       }
     }
   };
@@ -518,10 +579,13 @@ addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', (e) => e.preventDefault());
 
 // Centre button of the phone navigation bar: jump to the upload view and pick files.
-$('btn-bn-add').addEventListener('click', () => {
+// It is a <label for="file-input">, so the picker opens natively.
+$('btn-bn-add').addEventListener('click', (e) => {
   if (location.hash === '#history') location.hash = '#upload';
-  if (selectionLocked()) return $('queue').scrollIntoView({ block: 'start' });
-  $('file-input').click();
+  if (selectionLocked()) {
+    e.preventDefault();
+    $('queue').scrollIntoView({ block: 'start' });
+  }
 });
 
 $('btn-clear').addEventListener('click', () => {
@@ -539,6 +603,7 @@ function resetBatch() {
   rowCache.clear();
   $('file-list').replaceChildren();
   lastVisibleKey = '';
+  listLimit = LIST_PAGE;
   S.filter = 'all';
   renderSelection();
   renderNow();
@@ -552,15 +617,14 @@ function renderSelection() {
     n === 1 ? t('selectedOne', { size: fmtBytes(bytes) }) : t('selectedSummary', { count: fmtNum(n), size: fmtBytes(bytes) });
   $('step-files').classList.toggle('is-done', n > 0);
   const videos = S.items.filter((i) => i.kind === 'video').length;
+  // The ~30 MB FFmpeg engine is only fetched once muting is on AND there is a video to mute.
+  if ($('opt-mute').checked && videos) preloadMuter();
   $('mute-count').hidden = !($('opt-mute').checked && videos);
   $('mute-count').textContent = t('optMuteVideos', { count: fmtNum(videos) });
   renderStartButton();
 }
 
-$('opt-mute').addEventListener('change', (e) => {
-  if (e.target.checked) preloadMuter();
-  renderSelection();
-});
+$('opt-mute').addEventListener('change', () => renderSelection());
 
 // ------------------------------------------------------------------ start / preflight
 
@@ -657,24 +721,26 @@ async function preflight() {
   };
   const dups = [];
   try {
-    for (const it of S.items) {
-      if (it.status !== 'waiting') continue;
+    const check = async (it) => {
+      if (it.status !== 'waiting') return;
       const existing = await listDir(it.relDir);
-      if (!existing.length) continue;
+      if (!existing.length) return;
       const doneId = await store.get(`c:${fingerprint(it, S.folder.id)}`);
       if (doneId && existing.some((f) => f.id === doneId)) {
         it.status = 'uploaded';
         it.driveId = doneId;
         it.note = 'alreadyUploaded';
         it.uploadSize = it.sent = it.size;
-        continue;
+        return;
       }
       const match = existing.find((f) => f.name === it.file.name);
       if (match) {
         it.dupMatch = match;
         dups.push(it);
       }
-    }
+    };
+    for (let i = 0; i < S.items.length; i += 100) await Promise.all(S.items.slice(i, i + 100).map(check));
+    dups.sort((a, b) => a.id - b.id);
   } catch (e) {
     S.lastErrors.unshift(`preflight: ${e?.message || e}`);
     // Couldn't check (e.g. flaky network): upload as new copies, never overwrite.
@@ -835,6 +901,7 @@ $('filters').addEventListener('click', (e) => {
   const chip = e.target.closest('[data-filter]');
   if (!chip) return;
   S.filter = chip.dataset.filter;
+  listLimit = LIST_PAGE;
   renderNow();
 });
 
@@ -935,6 +1002,7 @@ function renderNow() {
 
   const folderName = (u?.folder || S.folder)?.id === 'root' ? t('myDrive') : (u?.folder || S.folder)?.name;
   $('uploading-to').textContent = started && u.state !== 'done' && folderName ? t('uploadingTo', { folder: folderName }) : '';
+  $('files-count').textContent = started ? t('filesUploaded', { done: fmtNum(s.uploaded), total: fmtNum(s.total) }) : '';
   let eta = '';
   if (started && u.state === 'running') {
     eta = s.eta != null ? `${t('eta', { time: fmtDuration(s.eta) })} · ${t('speed', { speed: fmtBytes(s.speed) })}` : t('etaCalculating');
@@ -1007,7 +1075,10 @@ const CHECK_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l
 
 const rowCache = new Map(); // id -> { el, sig }
 let lastVisibleKey = '';
-const LIST_LIMIT = 300;
+// Only a page of rows is in the DOM at a time, so thousands of files don't
+// slow the page (or the uploads) down. "Show more" adds another page.
+const LIST_PAGE = 200;
+let listLimit = LIST_PAGE;
 
 function matchFilter(it, f) {
   if (f === 'all') return true;
@@ -1030,7 +1101,7 @@ function renderList(items, started) {
     chip.hidden = !started && f !== 'all';
   }
   const filtered = items.filter((i) => matchFilter(i, S.filter));
-  const visible = filtered.slice(0, LIST_LIMIT);
+  const visible = filtered.slice(0, listLimit);
   const key = visible.map((i) => i.id).join(',');
   const list = $('file-list');
   if (key !== lastVisibleKey) {
@@ -1039,8 +1110,8 @@ function renderList(items, started) {
   }
   for (const it of visible) updateRow(rowFor(it), it, started);
   $('list-empty').hidden = filtered.length > 0;
-  $('list-more').hidden = filtered.length <= LIST_LIMIT;
-  $('list-more').textContent = t('moreRows', { shown: fmtNum(LIST_LIMIT), total: fmtNum(filtered.length) });
+  $('list-more').hidden = filtered.length <= listLimit;
+  $('list-more-text').textContent = t('moreRows', { shown: fmtNum(visible.length), total: fmtNum(filtered.length) });
 }
 
 function rowFor(it) {
@@ -1070,7 +1141,9 @@ function updateRow(r, it, started) {
   const isProc = it.status === 'processing';
   const frac = isProc ? it.muteProgress || 0 : it.uploadSize ? it.sent / it.uploadSize : 0;
   const pct = Math.floor(Math.min(1, frac) * 100);
-  const sig = `${it.status}|${pct}|${it.error?.key || ''}|${it.muted ? 1 : 0}|${started ? 1 : 0}|${it.note || ''}|${it.mute ? 1 : 0}`;
+  const showSpeed = it.status === 'uploading' && it.speed > 1024;
+  const speedText = showSpeed ? t('speed', { speed: fmtBytes(it.speed) }) : '';
+  const sig = `${it.status}|${pct}|${speedText}|${it.error?.key || ''}|${it.muted ? 1 : 0}|${started ? 1 : 0}|${it.note || ''}|${it.mute ? 1 : 0}`;
   if (sig === r.sig) return;
   r.sig = sig;
   const el = r.el;
@@ -1082,7 +1155,8 @@ function updateRow(r, it, started) {
   const tag = el.querySelector('.tag');
   tag.hidden = !(it.muted || (it.mute && !FINAL.has(it.status)));
   tag.textContent = t('mutedTag');
-  el.querySelector('.pct').textContent = ['uploading', 'processing', 'paused', 'retrying'].includes(it.status) && pct > 0 ? `${fmtNum(pct)}%` : '';
+  const pctText = ['uploading', 'processing', 'paused', 'retrying'].includes(it.status) && pct > 0 ? `${fmtNum(pct)}%` : '';
+  el.querySelector('.pct').textContent = speedText ? `${pctText || `${fmtNum(0)}%`} — ${speedText}` : pctText;
   el.querySelector('.row-bar > span').style.width = `${pct}%`;
 
   const err = el.querySelector('.row-err');
@@ -1138,7 +1212,7 @@ function renderDebug(u, s) {
   if (!u) return;
   const lines = [
     `mode: ${isDemo ? 'demo' : 'google'}  state: ${u.state}  banner: ${u.banner || '-'}`,
-    `concurrency: ${tuning.concurrency}  active: ${u.active.size}  chunk start: ${fmtBytes(tuning.chunkStart)}`,
+    `parallel slots: ${u.slots} (${tuning.concurrencyMin}–${tuning.concurrencyMax})  active: ${u.active.size}  chunk start: ${fmtBytes(tuning.chunkStart)}`,
     `speed: ${fmtBytes(s.speed || 0)}/s  muted in memory: ${fmtBytes(u.heldBytes)}`,
     `token valid for: ${Math.round(msLeft() / 60000)} min  online: ${navigator.onLine}`,
     ...u.items.filter((i) => i.error?.detail).slice(0, 8).map((i) => `#${i.id} ${i.status}: ${i.error.detail.split('\n')[0]}`),
@@ -1230,7 +1304,21 @@ function confirmDialog(text, yes, no) {
 
 // ------------------------------------------------------------------ boot
 
-applyI18n();
-$('landing').hidden = false;
-store.purgeExpired();
-preloadAuth().catch(() => showSignInError('unknown'));
+$('list-more-btn').addEventListener('click', () => {
+  listLimit += LIST_PAGE;
+  renderNow();
+});
+
+function boot() {
+  applyI18n();
+  store.purgeExpired();
+  // GIS is only needed later, to renew the token without leaving the page.
+  preloadAuth().catch(() => {});
+  const back = completeRedirect();
+  if (back?.error) return showLanding(back.error === 'access_denied' ? 'unknown' : back.error);
+  // Just returned from Google, or already signed in earlier in this tab:
+  // go straight to the upload dashboard without asking again.
+  if (hasToken()) return enterApp();
+  showLanding();
+}
+boot();

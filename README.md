@@ -8,7 +8,7 @@ A free web app that uploads large numbers of photos, videos and other files **di
 ## Architecture
 
 ```
- User's browser ──(Google OAuth, token in memory)──▶ accounts.google.com
+ User's browser ──(Google OAuth redirect, token in this tab only)──▶ accounts.google.com
        │
        ├──(optional) FFmpeg.wasm on the device: remove audio, copy video stream
        │
@@ -32,13 +32,14 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
 
 ### Upload engine (`src/uploader.js`)
 - Files of 5 MB or less are sent with a single multipart request. Larger files use **Drive resumable sessions**.
-- **Chunked uploads.** Chunks start at 16 MB on desktop and 8 MB on mobile, then adapt between 4 MB and 128 MB to the measured speed.
-- **Controlled concurrency.** Desktop runs 4 slots, mobile 3, and slow or data-saver connections 2. Small files count as half a slot.
+- **Chunked uploads.** Chunks start at 32 MB on desktop and 16 MB on mobile, then adapt between 4 MB and 512 MB (128 MB on phones) to the measured speed. Each chunk is a lazy slice of the file on disk: nothing is read into JavaScript memory, base64-encoded or copied.
+- **Adaptive concurrency.** Uploads start with 4 parallel slots on desktop, 3 on mobile and 2 on slow or data-saver connections. While files are waiting, the engine measures total throughput every 10 seconds and adds a slot while that makes things faster, or removes one when it doesn't (desktop 2–8, phones and low-end devices 2–4). Small files count as half a slot.
+- **Token-free chunks.** Once a resumable session is open, its session URI authorises the upload by itself, so chunk requests carry no access token. A multi-GB file keeps uploading even if the 1-hour token expires halfway through.
 - **Only the missing part is re-sent.** After any failure the app asks Drive how many bytes it already has (`Content-Range: bytes */N`) and continues from that point.
 - **Retries with exponential backoff and jitter** for network, rate-limit (403/429) and 5xx errors. Permission and quota errors stop the queue and show a clear message instead of retrying forever.
 - **Offline handling.** Uploads pause when the connection drops. The app probes until Drive answers again, then resumes automatically (or waits for the user, depending on the setting). A dropped connection never marks files as failed.
 - **Surviving a page refresh.** Resumable session URIs and "already finished" markers are kept in IndexedDB, scoped to the account and expiring after 7 days. If the user selects the same files again, finished files are skipped and partial files continue where they stopped. File contents are never stored.
-- **Token renewal.** Google tokens last about 1 hour. The app renews the token when the user clicks Start and again quietly before it expires. If the browser needs a tap to renew, uploads pause with a "Continue" button rather than failing.
+- **Token renewal.** Google tokens last about 1 hour. The app renews the token when the user clicks Start and tries again quietly before it expires. About 12 minutes before expiry it also opens upload sessions for the files still waiting, so those keep uploading after the token runs out. Only files that still need a new session wait, behind a "Continue" button; the queue is never lost.
 - **Wake Lock** keeps phone screens awake during uploads. The browser warns before the user leaves the page mid-upload.
 - **Duplicate names.** The user chooses *new copy*, *replace* or *skip* for each file. Replace uploads a **new revision** of the existing file, and Drive keeps the previous version in its version history. Replace asks for a second confirmation and is only offered for files the app is allowed to edit.
 
@@ -63,7 +64,9 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
    - While the app is in **Testing** status, only listed test users can sign in. **Publish** it for everyone. Because both scopes are non-sensitive, verification is light (brand verification only).
 4. **Credentials → Create credentials → OAuth client ID → Web application**:
    - Authorised JavaScript origins: `https://your-domain.example` (plus `http://localhost:5173` for development).
-   - No redirect URIs are needed, and the app does not use a client secret.
+   - **Authorised redirect URIs** (required for sign-in): the exact address of the app's page, **with the trailing slash**, for example
+     `https://shahad8ip-creator.github.io/afyaa-drive-upload/` and `http://localhost:5173/`. Google sends the user back to this address after sign-in. The app computes it from the current page, so production and development each return to themselves.
+   - The app does not use a client secret.
 5. **Credentials → Create credentials → API key** (used by the Picker):
    - Restrict it to **HTTP referrers**: `https://your-domain.example/*` (and `http://localhost:5173/*`).
    - API restrictions: **Google Picker API** only.
@@ -101,8 +104,8 @@ Add the final domain to the OAuth client's authorised origins and to the API key
 ---
 
 ## Security checklist
-- Official Google OAuth (Google Identity Services). The app never asks for or sees a password.
-- The access token is kept **in memory only**: no localStorage, no cookies, no server. It is gone when the tab closes.
+- Official Google OAuth 2.0. Sign-in is a full-page redirect to Google that returns to this exact page; a random `state` value ties each return to the tab that started it. The app never asks for or sees a password.
+- The short-lived access token (about 1 hour) is kept in **sessionStorage** for this tab only, so a refresh or a visit to the privacy page doesn't sign the user out. No localStorage, no cookies, no server. It is removed from the address bar right away and is gone when the tab closes or the user signs out.
 - **Sign out** discards the token and the remembered email. **Disconnect** also revokes the app's grant in the Google account and clears this device's resume data.
 - Strict Content-Security-Policy. Scripts load only from this site and Google. `frame-ancestors 'none'`.
 - No analytics, no third-party trackers, and no logging of file names anywhere outside the user's own screen.
@@ -113,7 +116,7 @@ Add the final domain to the OAuth client's authorised origins and to the API key
 ```
 index.html          markup for landing, dashboard, history and dialogs
 src/config.js       env config, scopes, performance tuning
-src/auth.js         Google Identity Services token flow (memory-only token)
+src/auth.js         OAuth redirect sign-in + GIS pop-up renewal (tab-scoped token)
 src/drive.js        Drive REST: resumable/multipart uploads, folders, appData
 src/uploader.js     queue, concurrency, retries, offline, pause/cancel
 src/mute.js         on-device audio removal with FFmpeg.wasm
@@ -152,5 +155,7 @@ public/_headers     security headers for the static host
 - [ ] A session longer than 1 hour (token renewal).
 
 ## Known platform limits
+- **Sign-in inside social apps.** Google blocks OAuth inside the built-in browsers of Instagram, Facebook, Snapchat, TikTok and similar apps. The landing page detects these and asks the user to open the page in Safari or Chrome.
+- **Drive write limits.** Google limits how many files one account can create per second. Hundreds of small photos are therefore limited by file count rather than bandwidth; the adaptive concurrency stops adding slots when that happens.
 - **iPhone/iPad.** iOS may convert videos to a more compatible format when they are picked from Photos (*Settings → Photos → Transfer to Mac or PC*, or "Most Compatible" in the picker). Choosing a whole folder is not available on iOS or Android browsers. Uploads stop if the user switches apps for a long time, because iOS suspends background tabs. Wake Lock helps while the page stays open.
 - **Duplicate detection** uses the `drive.file` scope, so it can see files this app uploaded plus the folders the user picked. It cannot see files that were put in the folder by other means. This is the trade-off for not asking to read the whole Drive. Duplicates are never overwritten without the user's explicit choice in any case.
