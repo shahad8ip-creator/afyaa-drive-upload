@@ -38,7 +38,8 @@ Folders are browsed with the official **Google Picker**, which supports My Drive
 - **Only the missing part is re-sent.** After any failure the app asks Drive how many bytes it already has (`Content-Range: bytes */N`) and continues from that point.
 - **Retries with exponential backoff and jitter** for network, rate-limit (403/429) and 5xx errors. Permission and quota errors stop the queue and show a clear message instead of retrying forever.
 - **Offline handling.** Uploads pause when the connection drops. The app probes until Drive answers again, then resumes automatically (or waits for the user, depending on the setting). A dropped connection never marks files as failed.
-- **Surviving a page refresh.** Resumable session URIs and "already finished" markers are kept in IndexedDB, scoped to the account and expiring after 7 days. If the user selects the same files again, finished files are skipped and partial files continue where they stopped. File contents are never stored.
+- **Surviving a page refresh.** Resumable session URIs and "already finished" markers are kept in IndexedDB, scoped to the account and expiring after 7 days. If the user selects the same files again, finished files are skipped and partial files continue where they stopped.
+- **Surviving iOS closing the page (phones/tablets).** iOS often closes Safari pages in the background, and a reloaded page loses access to the picked files. On touch devices each unfinished file is therefore also copied, one at a time, into the browser's own storage on the device (IndexedDB, within the storage quota; `navigator.storage.persist()` is requested). After a reload the queue is rebuilt from these copies and continues by itself from the last byte Drive has, with no re-selection. Each copy is deleted as soon as its file is uploaded or cancelled, when the batch ends, and on sign-out; everything expires after 7 days. If space runs out, the remaining files simply need re-selecting as before.
 - **Token renewal.** Google tokens last about 1 hour. The app renews the token when the user clicks Start and tries again quietly before it expires. Large files (videos) get their upload session as soon as the batch starts, and about 12 minutes before expiry sessions are opened for the files still waiting, so those keep uploading after the token runs out. Only files that still need a new session wait, behind a "Continue" button; the queue is never lost.
 - **Leaving Safari and coming back.** iOS freezes network requests while Safari is in the background. When the page becomes visible again, stalled uploads are restarted at once from the last byte Drive has and the connection is re-checked immediately. A watchdog also restarts any request that has sent nothing for 90 seconds. If iOS reloaded the page, the notice offers to re-select the files: finished ones are skipped and unfinished ones continue (the resume key is folder + path + name + size, because iOS changes the modification date on every pick).
 - **Wake Lock** keeps phone screens awake during uploads. The browser warns before the user leaves the page mid-upload.
@@ -130,7 +131,7 @@ src/fastmute.js     instant MP4/MOV audio removal (no re-encode, no memory)
 src/mute.js         FFmpeg.wasm fallback for other video formats
 src/picker.js       Google Picker folder selection
 src/history.js      per-user history in Drive appDataFolder
-src/store.js        per-account IndexedDB resume records (7-day expiry)
+src/store.js        per-account IndexedDB resume records + temporary file copies (7-day expiry)
 src/mock.js         demo-mode Drive simulator
 src/i18n.js         Arabic (default) and English strings
 src/styles.css      Afyaa palette, mobile-first layout

@@ -45,6 +45,7 @@ export class Uploader {
   }
 
   destroy() {
+    this._destroyed = true;
     clearInterval(this._sampler);
     clearInterval(this._authTicker);
     clearInterval(this._poll);
@@ -74,6 +75,7 @@ export class Uploader {
     this._saveManifest();
     this._pump();
     this._prefetchSessions();
+    this._copyLoop();
     this._checkDone();
     this._emit();
   }
@@ -152,6 +154,7 @@ export class Uploader {
     }
     if (it.sessionUri) this.drive.cancelSession(it.sessionUri);
     store.del(`s:${it.fp}`);
+    this._dropCopy(it);
     this._release(it);
     it.status = 'cancelled';
     it.error = null;
@@ -173,7 +176,9 @@ export class Uploader {
     if (withSound) {
       it.mute = false;
       this._release(it);
+      this._dropCopy(it);
       it.fp = fingerprint(it, this.folder.id);
+      this._copyLoop();
     }
     it.status = 'waiting';
     it.attempts = 0;
@@ -354,6 +359,7 @@ export class Uploader {
       store.del(`s:${it.fp}`);
       if (it.driveId) store.set(`c:${it.fp}`, it.driveId);
       this._release(it);
+      this._dropCopy(it);
     } catch (e) {
       this._fail(it, e);
     } finally {
@@ -730,6 +736,7 @@ export class Uploader {
     this.state = 'done';
     this.banner = null;
     store.del('batch');
+    if (tuning.keepCopies) store.clearFiles();
     this.onDone(this._summary());
   }
 
@@ -751,9 +758,59 @@ export class Uploader {
 
   _saveManifest() {
     if (this.state === 'done' || !this.folder) return;
-    const left = this.items.filter((i) => !FINAL.has(i.status)).length;
+    const open = this.items.filter((i) => !FINAL.has(i.status));
     const mute = this.items.some((i) => i.mute);
-    store.set('batch', { folderName: this.folder.name, folderId: this.folder.id, total: this.items.length, left, mute, autoResume: this.autoResume });
+    const batch = { folderName: this.folder.name, folderId: this.folder.id, total: this.items.length, left: open.length, mute, autoResume: this.autoResume };
+    // With on-device copies, remember exactly which files are left so the
+    // upload can carry on by itself after iOS reloads the page.
+    if (tuning.keepCopies) {
+      batch.items = open.map((i) => ({
+        fp: i.fp,
+        name: i.file.name,
+        size: i.size,
+        relDir: i.relDir,
+        kind: i.kind,
+        mute: !!i.mute,
+        existingId: i.existingId || null,
+        stored: !!i.stored,
+      }));
+    }
+    store.set('batch', batch);
+  }
+
+  // Copies unfinished files, one at a time, into this device's browser
+  // storage (phones/tablets only). Stops quietly when space runs out: those
+  // files then just need picking again after a reload, as before.
+  async _copyLoop() {
+    if (!tuning.keepCopies || this._copying) return;
+    this._copying = true;
+    try {
+      try {
+        await navigator.storage?.persist?.();
+      } catch {}
+      for (const it of this.items) {
+        if (this._destroyed || this.state === 'done') break;
+        if (FINAL.has(it.status) || it.stored) continue;
+        const est = await navigator.storage?.estimate?.().catch(() => null);
+        if (est?.quota && est.usage + it.size > est.quota * 0.9) break;
+        const fp = it.fp;
+        if (!(await store.putFile(fp, it.file))) break;
+        if (FINAL.has(it.status) || it.fp !== fp) {
+          store.delFile(fp);
+          continue;
+        }
+        it.stored = true;
+        this._saveManifest();
+      }
+    } finally {
+      this._copying = false;
+    }
+  }
+
+  _dropCopy(it) {
+    if (!it.stored) return;
+    it.stored = false;
+    store.delFile(it.fp);
   }
 
   _emit() {

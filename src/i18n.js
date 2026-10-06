@@ -154,6 +154,8 @@ const en = {
   resumeNotice:
     'An earlier upload to “{folder}” didn’t finish ({left} of {total} files left). Select the same files again and press “Start upload”: finished files are skipped and unfinished ones continue from where they stopped.',
   resumeSelect: 'Select the files to continue',
+  resumedAuto: 'The page was reopened, so uploading carried on by itself: {count} files are continuing from where they stopped.',
+  resumeMissing: '{count} files weren’t saved on the device in time. Select them again after this upload finishes and they’ll continue too.',
   dismiss: 'Dismiss',
 
   err_network: 'Connection problem. We’ll try again automatically.',
@@ -360,6 +362,8 @@ const ar = {
   resumeNotice:
     'لم يكتمل رفع سابق إلى «{folder}» (بقي {left} من {total} ملف). اختاري الملفات نفسها مجددًا ثم اضغطي «بدء الرفع»: سيتم تخطي ما اكتمل، ويُكمل الباقي من حيث توقف.',
   resumeSelect: 'اختيار الملفات للمتابعة',
+  resumedAuto: 'أُعيد فتح الصفحة فاستُكمل الرفع تلقائيًا: {count} ملف يُكمل من حيث توقف.',
+  resumeMissing: '{count} ملف لم يُحفظ على الجهاز في الوقت المناسب، اختاريها مجددًا بعد انتهاء هذا الرفع وستُكمل هي أيضًا.',
   dismiss: 'إخفاء',
 
   err_network: 'مشكلة في الاتصال. سنعيد المحاولة تلقائيًا.',
