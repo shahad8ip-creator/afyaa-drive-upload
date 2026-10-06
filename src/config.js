@@ -37,6 +37,7 @@ const conn = navigator.connection || {};
 const slowNet = conn.saveData || ['slow-2g', '2g', '3g'].includes(conn.effectiveType);
 
 const cores = navigator.hardwareConcurrency || 4;
+export const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
 const lowEnd = (navigator.deviceMemory && navigator.deviceMemory <= 2) || cores <= 2;
 
 export const tuning = {
@@ -46,7 +47,8 @@ export const tuning = {
   // drops one when it doesn't).
   concurrency: slowNet ? 2 : coarse ? 3 : 4,
   concurrencyMin: slowNet ? 1 : 2,
-  concurrencyMax: slowNet ? 3 : coarse || lowEnd ? 4 : 8,
+  // A slow-network hint only sets the starting point; measured speed decides.
+  concurrencyMax: coarse || lowEnd ? 4 : 8,
   // Files up to this size go up in one multipart request (1 round-trip).
   multipartMax: 5 * 1024 * 1024,
   // Resumable chunk sizes must be multiples of 256 KiB. Google recommends
@@ -56,7 +58,8 @@ export const tuning = {
   // Drive keeps the bytes it received and only the rest is re-sent.
   chunkStart: (coarse ? 16 : 32) * 1024 * 1024,
   chunkMin: 4 * 1024 * 1024,
-  chunkMax: (coarse ? 128 : 512) * 1024 * 1024,
+  // iPhone/iPad: smaller chunks keep Safari's memory use low with many videos.
+  chunkMax: (ios ? 64 : coarse ? 128 : 512) * 1024 * 1024,
   // Largest video we try to mute inside the browser. Muting keeps the result in
   // memory until it is uploaded, so phones get a lower ceiling.
   muteMaxBytes: (coarse ? 450 : 1536) * 1024 * 1024,

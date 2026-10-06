@@ -152,7 +152,8 @@ const en = {
   bannerPermission: 'You don’t have permission to access this folder. Please select another folder.',
   leaveWarning: 'Uploads are still running. If you leave, unfinished files will stop.',
   resumeNotice:
-    'An earlier upload to “{folder}” didn’t finish ({left} of {total} files left). Select the same files again to continue — files that already finished will be skipped.',
+    'An earlier upload to “{folder}” didn’t finish ({left} of {total} files left). Select the same files again and press “Start upload”: finished files are skipped and unfinished ones continue from where they stopped.',
+  resumeSelect: 'Select the files to continue',
   dismiss: 'Dismiss',
 
   err_network: 'Connection problem. We’ll try again automatically.',
@@ -359,7 +360,8 @@ const ar = {
   bannerPermission: 'ليست لديك صلاحية الوصول إلى هذا المجلد. يُرجى اختيار مجلد آخر.',
   leaveWarning: 'ما زال الرفع جاريًا. إذا غادرتِ الصفحة ستتوقف الملفات غير المكتملة.',
   resumeNotice:
-    'لم يكتمل رفع سابق إلى «{folder}» (بقي {left} من {total} ملف). اختاري الملفات نفسها مجددًا للمتابعة — وسيتم تخطي ما اكتمل رفعه.',
+    'لم يكتمل رفع سابق إلى «{folder}» (بقي {left} من {total} ملف). اختاري الملفات نفسها مجددًا ثم اضغطي «بدء الرفع»: سيتم تخطي ما اكتمل، ويُكمل الباقي من حيث توقف.',
+  resumeSelect: 'اختيار الملفات للمتابعة',
   dismiss: 'إخفاء',
 
   err_network: 'مشكلة في الاتصال. سنعيد المحاولة تلقائيًا.',
