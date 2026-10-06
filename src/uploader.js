@@ -73,7 +73,37 @@ export class Uploader {
     }
     this._saveManifest();
     this._pump();
+    this._prefetchSessions();
     this._checkDone();
+    this._emit();
+  }
+
+  // The page became visible again (back from another app, screen unlocked).
+  // iOS freezes or kills network requests while Safari is in the background,
+  // so restart anything that stalled and check the connection right away
+  // instead of waiting for retry timers. Resumable uploads continue from the
+  // last byte Drive has; nothing is sent twice.
+  wake({ wasHidden = false } = {}) {
+    if (this.state === 'offline') {
+      this.drive.ping().then((ok) => ok && this.setOnline(true)).catch(() => {});
+      return;
+    }
+    if (this.state !== 'running') return;
+    this.netStrikes = 0;
+    const now = performance.now();
+    for (const it of this.active) {
+      if (wasHidden && it.status === 'uploading' && it.controller && now - (it._progressAt || 0) > 5000) {
+        it.abortTo = 'waiting';
+        it.controller.abort();
+      }
+    }
+    for (const it of this.items) {
+      if (it.status === 'retrying') {
+        clearTimeout(it.retryTimer);
+        it.status = 'waiting';
+      }
+    }
+    this._pump();
     this._emit();
   }
 
@@ -302,6 +332,7 @@ export class Uploader {
       it.sent = 0;
       it.status = 'uploading';
       it.speed = 0;
+      it._progressAt = performance.now();
       this._emit();
       if (!it.sessionUri) await this._ensureAuth();
 
@@ -386,6 +417,7 @@ export class Uploader {
   _progress(it, n) {
     const delta = n - (it.sent || 0);
     if (delta > 0) this.sentCounter += delta;
+    if (n !== it.sent) it._progressAt = performance.now();
     it.sent = n;
     this._emit();
   }
@@ -560,7 +592,7 @@ export class Uploader {
   // browser needs a tap for that, show a gentle prompt while uploads go on.
   _authTick() {
     if (this.state !== 'running') return;
-    if (!isDemo && msLeft() < 12 * 60000) this._prefetchSessions();
+    this._prefetchSessions();
     if (this._softAuthTried) return;
     if (msLeft() < 6 * 60000) {
       this._softAuthTried = true;
@@ -588,11 +620,23 @@ export class Uploader {
   async _prefetchSessions() {
     if (this._prefetching || !this._tokenOk()) return;
     this._prefetching = true;
+    // Large files (videos) get their session as soon as the batch starts, so
+    // a long batch never depends on the 1-hour token. Small files are quick
+    // and use a single request, so they only get one when the token is close
+    // to expiring.
+    const all = !isDemo && msLeft() < 12 * 60000;
     try {
       for (let i = this._cursor; i < this.items.length; i++) {
         if (this.state !== 'running' || !this._tokenOk()) break;
         const it = this.items[i];
-        if (it.status !== 'waiting' || it.sessionUri || it.mute || !it.size) continue;
+        if (it.status !== 'waiting' || it.sessionUri || !it.size) continue;
+        if (it.mute && it.kind === 'video' && !it.blob) {
+          const out = await fastMute(it.file); // milliseconds; null if it needs FFmpeg
+          if (!out || it.status !== 'waiting' || it.blob) continue;
+          Object.assign(it, { blob: out, muted: true, muteFast: true });
+        }
+        const src = it.blob || it.file;
+        if (!all && src.size <= tuning.multipartMax) continue;
         try {
           const parentId = await this._resolveDir(it.relDir);
           const uri = await this.drive.startResumable({
@@ -600,7 +644,7 @@ export class Uploader {
             parents: [parentId],
             mimeType: it.file.type || undefined,
             existingId: it.existingId,
-            size: it.size,
+            size: src.size,
           });
           if (it.status !== 'waiting' || it.sessionUri) {
             this.drive.cancelSession(uri);
@@ -608,7 +652,7 @@ export class Uploader {
           }
           it.sessionUri = uri;
           it.offset = 0;
-          store.set(`s:${it.fp}`, { uri, total: it.size });
+          store.set(`s:${it.fp}`, { uri, total: src.size });
         } catch (e) {
           if (e?.kind === 'auth' || e?.kind === 'network') break;
         }
@@ -637,6 +681,13 @@ export class Uploader {
     if (this.state !== 'running') return;
     this.speed = this.speed ? this.speed * 0.8 + inst * 0.2 : inst;
     for (const it of this.active) {
+      // A request that has sent nothing for 90 s is stuck (e.g. frozen by iOS
+      // in the background): abort it; it resumes from Drive's last byte.
+      if (it.status === 'uploading' && it.controller && now - (it._progressAt || now) > 90000) {
+        it.abortTo = 'waiting';
+        it.controller.abort();
+        continue;
+      }
       const d = Math.max(0, (it.sent || 0) - (it._lastSent ?? it.sent ?? 0)) / dt;
       it._lastSent = it.sent || 0;
       it.speed = it.status === 'uploading' ? (it.speed ? it.speed * 0.7 + d * 0.3 : d) : 0;
@@ -701,7 +752,8 @@ export class Uploader {
   _saveManifest() {
     if (this.state === 'done' || !this.folder) return;
     const left = this.items.filter((i) => !FINAL.has(i.status)).length;
-    store.set('batch', { folderName: this.folder.name, folderId: this.folder.id, total: this.items.length, left });
+    const mute = this.items.some((i) => i.mute);
+    store.set('batch', { folderName: this.folder.name, folderId: this.folder.id, total: this.items.length, left, mute, autoResume: this.autoResume });
   }
 
   _emit() {

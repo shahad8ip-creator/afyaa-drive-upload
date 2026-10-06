@@ -87,7 +87,10 @@ export const store = {
 };
 
 // Identifies "the same file going to the same place" across page reloads.
+// The modification date is left out on purpose: iPhone/iPad stamp a new one
+// each time a video is picked from Photos, which would stop a re-selected
+// file from resuming. Name + size + folder is specific enough.
 export function fingerprint(item, folderId) {
   const f = item.file;
-  return ['v1', folderId, item.relDir, f.name, f.size, f.lastModified, item.mute ? 'm' : ''].join('|');
+  return ['v2', folderId, item.relDir, f.name, f.size, item.mute ? 'm' : ''].join('|');
 }

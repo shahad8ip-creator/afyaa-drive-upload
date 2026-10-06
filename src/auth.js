@@ -11,14 +11,18 @@
 // files the user selected. Uploads already in progress don't need renewing:
 // a resumable upload session authorises itself (see drive.js).
 //
-// The short-lived access token is kept in sessionStorage: it survives a page
-// refresh or a visit to the privacy page in the same tab, and is erased when
-// the tab is closed. It never goes to localStorage, cookies or any server.
+// The short-lived access token (about 1 hour) is kept in this browser's
+// localStorage until it expires or the user signs out, so leaving Safari,
+// switching apps or a page reload by iOS doesn't sign the user out. When it
+// has expired, the app asks Google again silently (prompt=none): a quick
+// redirect with no screen to click, as long as the user is still signed in to
+// Google and has granted access before. It never goes to cookies or a server.
 
 import { config, isDemo } from './config.js';
 
 const KEY = 'afyaa:auth';
 const FLOW = 'afyaa:oauth-flow';
+const SILENT_FAILED = 'afyaa:silent-failed';
 const SCOPE_LIST = config.scopes.split(' ');
 
 let token = null;
@@ -27,34 +31,39 @@ let client = null;
 let pending = null;
 let gisReady = null;
 
-function readSession(key) {
+function readStore(storage, key) {
   try {
-    return JSON.parse(sessionStorage.getItem(key) || 'null');
+    return JSON.parse(storage.getItem(key) || 'null');
   } catch {
     return null;
   }
 }
-function writeSession(key, value) {
+function writeStore(storage, key, value) {
   try {
-    if (value == null) sessionStorage.removeItem(key);
-    else sessionStorage.setItem(key, JSON.stringify(value));
+    if (value == null) storage.removeItem(key);
+    else storage.setItem(key, JSON.stringify(value));
   } catch {}
 }
+const ls = () => window.localStorage;
+const ss = () => window.sessionStorage;
+const readSession = (key) => readStore(ss(), key);
+const writeSession = (key, value) => writeStore(ss(), key, value);
 
 function setToken(value, expiresInSec) {
   token = value;
   expiresAt = Date.now() + (Number(expiresInSec) || 3600) * 1000;
-  writeSession(KEY, { token, expiresAt });
+  writeStore(ls(), KEY, { token, expiresAt });
 }
 
 // Restore a token saved earlier in this tab (page refresh, back from the
 // privacy page). Expired or nearly-expired tokens are discarded.
 (() => {
-  const saved = readSession(KEY);
+  writeSession(KEY, null); // older versions kept it per tab
+  const saved = readStore(ls(), KEY);
   if (saved?.token && saved.expiresAt - Date.now() > 2 * 60000) {
     token = saved.token;
     expiresAt = saved.expiresAt;
-  } else if (saved) writeSession(KEY, null);
+  } else if (saved) writeStore(ls(), KEY, null);
 })();
 
 export function getToken() {
@@ -89,7 +98,7 @@ export function signInWithRedirect({ prompt = '', hint } = {}) {
   if (isDemo) return requestToken();
   const state = randomState();
   const route = location.hash && !/access_token|error=/.test(location.hash) ? location.hash : '';
-  writeSession(FLOW, { state, route, at: Date.now() });
+  writeSession(FLOW, { state, route, at: Date.now(), silent: prompt === 'none' });
   const params = new URLSearchParams({
     client_id: config.clientId,
     redirect_uri: redirectUri(),
@@ -121,11 +130,34 @@ export function completeRedirect() {
   // The state must match the one this tab created, so a token planted by
   // another site can't sign the user into someone else's account.
   if (!flow || p.get('state') !== flow.state) return { error: 'state' };
-  if (p.get('error')) return { error: p.get('error') === 'access_denied' ? 'access_denied' : 'unknown' };
+  if (p.get('error')) {
+    // A silent renewal that needs the user (signed out of Google, consent
+    // changed…) is not an error to show: just offer the sign-in button.
+    if (flow.silent) {
+      writeSession(SILENT_FAILED, Date.now());
+      return { error: null, silentFailed: true };
+    }
+    return { error: p.get('error') === 'access_denied' ? 'access_denied' : 'unknown' };
+  }
   const granted = (p.get('scope') || '').split(' ');
   if (!SCOPE_LIST.every((s) => granted.includes(s))) return { error: 'scope' };
   setToken(p.get('access_token'), p.get('expires_in'));
+  writeSession(SILENT_FAILED, null);
   return { ok: true };
+}
+
+/**
+ * Renews an expired session without any click, by a quick redirect to Google
+ * with prompt=none. Tried at most once every 10 minutes per tab, so it can
+ * never loop. Returns false when it isn't worth trying.
+ */
+export function trySilentSignIn(hint) {
+  if (isDemo || config.signInMode !== 'redirect' || !hint) return false;
+  const failed = Number(readSession(SILENT_FAILED)) || 0;
+  if (Date.now() - failed < 10 * 60000) return false;
+  writeSession(SILENT_FAILED, Date.now()); // cleared on success
+  signInWithRedirect({ prompt: 'none', hint });
+  return true;
 }
 
 function loadScript(src) {
@@ -196,6 +228,7 @@ export function requestToken({ prompt = '', hint } = {}) {
 export function signOutLocal() {
   token = null;
   expiresAt = 0;
+  writeStore(ls(), KEY, null);
   writeSession(KEY, null);
 }
 

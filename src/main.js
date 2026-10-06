@@ -1,6 +1,6 @@
 import { config, isDemo, tuning } from './config.js';
 import { t, getLang, setLang, applyDocumentLang, fmtBytes, fmtNum, fmtDuration, fmtDate } from './i18n.js';
-import { preloadAuth, requestToken, signInWithRedirect, completeRedirect, hasToken, signOutLocal, revokeAccess, msLeft } from './auth.js';
+import { preloadAuth, requestToken, signInWithRedirect, completeRedirect, trySilentSignIn, hasToken, signOutLocal, revokeAccess, msLeft } from './auth.js';
 import { realDrive, FOLDER_MIME } from './drive.js';
 import { mockDrive, sim } from './mock.js';
 import { preloadPicker, pickFolder } from './picker.js';
@@ -556,6 +556,7 @@ function checkPickerReload() {
   if (!isIOS || !at || Date.now() - at > 10 * 60000) return;
   $('resume-text').textContent = t('pickerReloaded');
   $('resume-notice').hidden = false;
+  $('btn-resume-select').hidden = true;
 }
 
 const dz = $('dropzone');
@@ -999,8 +1000,20 @@ function releaseWakeLock() {
   S.wakeLock?.release().catch(() => {});
   S.wakeLock = null;
 }
+// Leaving Safari (or locking the phone) pauses the page; on return, pick up
+// exactly where uploads stopped instead of waiting for retry timers.
+let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && S.uploader?.state === 'running') requestWakeLock();
+  if (document.visibilityState === 'hidden') {
+    hiddenAt = Date.now();
+    return;
+  }
+  if (S.uploader?.state === 'running') requestWakeLock();
+  S.uploader?.wake({ wasHidden: hiddenAt && Date.now() - hiddenAt > 3000 });
+  hiddenAt = 0;
+});
+addEventListener('pageshow', (e) => {
+  if (e.persisted) S.uploader?.wake({ wasHidden: true });
 });
 
 function onBatchDone(summary) {
@@ -1014,8 +1027,14 @@ function showResumeNotice() {
     if (!b || !b.left) return;
     $('resume-text').textContent = t('resumeNotice', { folder: b.folderName, left: fmtNum(b.left), total: fmtNum(b.total) });
     $('resume-notice').hidden = false;
+    $('btn-resume-select').hidden = false;
+    // Same options as last time, so re-selected files resume where they stopped.
+    if (b.mute != null) $('opt-mute').checked = !!b.mute;
+    if (b.autoResume != null) $('opt-resume').checked = !!b.autoResume;
+    renderSelection();
   });
 }
+$('btn-resume-select').addEventListener('click', () => ($('resume-notice').hidden = true));
 $('btn-dismiss-resume').addEventListener('click', () => {
   $('resume-notice').hidden = true;
   store.del('batch');
@@ -1382,9 +1401,12 @@ function boot() {
   preloadAuth().catch(() => {});
   const back = completeRedirect();
   if (back?.error) return showLanding(back.error === 'access_denied' ? 'unknown' : back.error);
-  // Just returned from Google, or already signed in earlier in this tab:
+  // Just returned from Google, or signed in earlier on this browser:
   // go straight to the upload dashboard without asking again.
   if (hasToken()) return enterApp();
+  // Signed in before but the 1-hour token expired (e.g. Safari was closed):
+  // renew it silently with a quick redirect, no button to press.
+  if (!back?.silentFailed && !inAppBrowser && trySilentSignIn(lastHint())) return;
   showLanding();
 }
 boot();
