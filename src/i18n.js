@@ -203,8 +203,6 @@ const en = {
 
   privacyLink: 'Privacy policy',
   footerPrivacy: 'Your files go directly to your Google Drive. Nothing is stored on our servers.',
-  debugToggle: 'Advanced: connection details',
-  simulateOffline: 'Simulate connection loss (demo)',
   confirm: 'Confirm',
   yes: 'Yes',
   units: ['B', 'KB', 'MB', 'GB', 'TB'],
@@ -411,8 +409,6 @@ const ar = {
 
   privacyLink: 'سياسة الخصوصية',
   footerPrivacy: 'تذهب ملفاتك مباشرة إلى Google Drive الخاص بك، ولا يُحفظ شيء على خوادمنا.',
-  debugToggle: 'متقدم: تفاصيل الاتصال',
-  simulateOffline: 'محاكاة انقطاع الاتصال (تجربة)',
   confirm: 'تأكيد',
   yes: 'نعم',
   units: ['بايت', 'ك.ب', 'م.ب', 'ج.ب', 'ت.ب'],

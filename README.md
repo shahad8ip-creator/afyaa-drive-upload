@@ -97,7 +97,7 @@ npm run build
 ```
 `npm run build` writes the deployable site to `dist/`.
 
-With no client ID configured, the app runs in **demo mode**. Sign-in and Drive are simulated, including random server errors and a "simulate connection loss" switch under *Advanced*, so the full interface can be tried without a Google account.
+With no client ID configured, the app runs in **demo mode**. Sign-in and Drive are simulated, including random server errors, so the full interface can be tried without a Google account.
 
 ### 3. Deploy (free)
 The site is hosted on **Netlify** at <https://afeiaaseer.netlify.app/>, connected to this GitHub repository: every merge into `main` is built and published automatically using `netlify.toml` (`npm run build` → `dist`). The security headers in `public/_headers` (CSP, HSTS, COOP, `frame-ancestors`, nosniff, Permissions-Policy) are applied by Netlify.
