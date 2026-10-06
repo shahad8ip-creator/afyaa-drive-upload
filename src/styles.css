@@ -105,7 +105,10 @@ a { color: var(--blue); }
   letter-spacing: .01em;
 }
 html[lang='ar'] .landing-title { display: none; } /* the Arabic line above already says it */
-.landing-desc { margin-top: 10px; color: var(--muted); max-width: 44ch; font-size: 1rem; text-wrap: pretty; }
+.landing-desc {
+  margin-top: 14px; color: var(--muted); max-width: 46ch; font-size: 1rem; text-wrap: pretty;
+  background: #fff; border-radius: var(--r-lg); padding: 16px 20px;
+}
 .signin-block { margin-top: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 
 /* Follows Google's sign-in button branding: white, neutral border, G mark. */
@@ -126,8 +129,9 @@ html[lang='ar'] .landing-title { display: none; } /* the Arabic line above alrea
   padding: 8px 14px; border-radius: var(--r-sm); max-width: 40ch;
 }
 .trust {
-  list-style: none; padding: 0; margin: 40px 0 0; display: grid; gap: 12px;
-  text-align: start; max-width: 400px; color: var(--muted); font-size: 0.9rem;
+  list-style: none; margin: 36px 0 0; display: grid; gap: 12px; width: 100%;
+  text-align: start; max-width: 440px; color: var(--muted); font-size: 0.9rem;
+  background: #fff; border-radius: var(--r-lg); padding: 18px 20px;
 }
 .trust li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; }
 .trust svg { width: 22px; height: 22px; fill: none; stroke: var(--plum); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-top: 1px; }
