@@ -390,9 +390,6 @@ label.btn { cursor: pointer; user-select: none; -webkit-user-select: none; }
 .row[data-s='cancelled'] .row-name, .row[data-s='skipped'] .row-name { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--line-strong); }
 .inline-action { margin-top: 6px; }
 
-.debug { margin-top: 18px; font-size: 0.8rem; color: var(--muted); }
-.debug summary { cursor: pointer; padding: 6px 0; }
-.debug pre { white-space: pre-wrap; direction: ltr; text-align: left; background: var(--bg); padding: 10px; border-radius: var(--r-sm); overflow-x: auto; }
 
 /* ---------- History ---------- */
 .history-view { max-width: 760px; }

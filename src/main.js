@@ -2,7 +2,7 @@ import { config, isDemo, tuning } from './config.js';
 import { t, getLang, setLang, applyDocumentLang, fmtBytes, fmtNum, fmtDuration, fmtDate } from './i18n.js';
 import { preloadAuth, requestToken, signInWithRedirect, completeRedirect, trySilentSignIn, hasToken, signOutLocal, revokeAccess, msLeft } from './auth.js';
 import { realDrive, FOLDER_MIME } from './drive.js';
-import { mockDrive, sim } from './mock.js';
+import { mockDrive } from './mock.js';
 import { preloadPicker, pickFolder } from './picker.js';
 import { preloadMuter } from './mute.js';
 import { FAST_MUTE_EXT } from './fastmute.js';
@@ -162,7 +162,6 @@ async function enterApp() {
   $('boot').hidden = true;
   $('landing').hidden = true;
   $('app').hidden = false;
-  $('sim-offline-wrap').hidden = !isDemo;
   renderUser();
   route();
   await restoreFolder();
@@ -972,10 +971,6 @@ $('filters').addEventListener('click', (e) => {
   renderNow();
 });
 
-$('sim-offline').addEventListener('change', (e) => {
-  sim.offline = e.target.checked;
-  S.uploader?.setOnline(!sim.offline);
-});
 
 addEventListener('online', () => S.uploader?.setOnline(true));
 addEventListener('offline', () => S.uploader?.setOnline(false));
@@ -1114,7 +1109,6 @@ function renderNow() {
   }
 
   renderList(items, started);
-  if (!$('debug').hidden && $('debug').open) renderDebug(u, s);
 }
 
 function previewStats(items) {
@@ -1290,20 +1284,6 @@ function updateRow(r, it, started) {
     actions.innerHTML = `<button type="button" class="icon-btn" data-act="cancel">${X_SVG}</button>`;
     actions.firstChild.setAttribute('aria-label', t('cancelFile', { name }));
   }
-}
-
-$('debug').addEventListener('toggle', () => renderNow());
-function renderDebug(u, s) {
-  if (!u) return;
-  const lines = [
-    `mode: ${isDemo ? 'demo' : 'google'}  state: ${u.state}  banner: ${u.banner || '-'}`,
-    `parallel slots: ${u.slots} (${tuning.concurrencyMin}–${tuning.concurrencyMax})  active: ${u.active.size}  chunk start: ${fmtBytes(tuning.chunkStart)}`,
-    `speed: ${fmtBytes(s.speed || 0)}/s  muted in memory: ${fmtBytes(u.heldBytes)}`,
-    `token valid for: ${Math.round(msLeft() / 60000)} min  online: ${navigator.onLine}`,
-    ...u.items.filter((i) => i.error?.detail).slice(0, 8).map((i) => `#${i.id} ${i.status}: ${i.error.detail.split('\n')[0]}`),
-    ...S.lastErrors.slice(0, 5),
-  ];
-  $('debug-text').textContent = lines.join('\n');
 }
 
 // ------------------------------------------------------------------ history
