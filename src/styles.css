@@ -131,8 +131,7 @@ a { color: var(--blue); }
 }
 html[lang='ar'] .landing-title { display: none; } /* the Arabic line above already says it */
 .landing-desc {
-  margin-top: 14px; color: var(--muted); max-width: 46ch; font-size: 1rem; text-wrap: pretty;
-  background: #fff; border-radius: var(--r-lg); padding: 16px 20px; width: 100%; max-width: none; box-shadow: var(--shadow);
+  margin-top: 20px; color: var(--muted); max-width: 40ch; font-size: 0.875rem; line-height: 1.75; text-wrap: pretty;
 }
 .signin-block { margin-top: 24px; display: flex; flex-direction: column; align-items: center; gap: 10px; width: 100%; }
 
@@ -155,12 +154,10 @@ html[lang='ar'] .landing-title { display: none; } /* the Arabic line above alrea
 }
 .trust {
   list-style: none; margin: 28px 0 0; display: grid; gap: 12px; width: 100%;
-  text-align: start; color: var(--muted); font-size: 0.9rem;
-  background: #fff; border-radius: var(--r-lg); padding: 18px 20px; box-shadow: var(--shadow);
+  text-align: start; color: var(--muted); font-size: 0.8rem; line-height: 1.6; max-width: 360px;
 }
-.trust li { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; }
-.trust li > svg { box-sizing: content-box; padding: 6px; border-radius: 10px; background: var(--plum-wash); }
-.trust li { grid-template-columns: 34px 1fr; align-items: center; }
+.trust li > svg { box-sizing: content-box; padding: 5px; border-radius: 9px; background: var(--plum-wash); width: 18px; height: 18px; }
+.trust li { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: center; }
 .trust svg { width: 22px; height: 22px; fill: none; stroke: var(--plum); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; margin-top: 1px; }
 
 /* ---------- App shell ---------- */
