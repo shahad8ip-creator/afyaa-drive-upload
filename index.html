@@ -19,11 +19,15 @@
 
   <!-- ============ Landing ============ -->
   <main id="landing" class="landing" hidden>
-    <button class="lang-btn landing-lang" type="button" data-lang-toggle></button>
+    <div class="band landing-band">
+      <button class="lang-btn" type="button" data-lang-toggle></button>
+    </div>
     <div class="landing-inner">
-      <img class="landing-logo" src="brand/logo-full.png" width="640" height="624" alt="جمعية أفياء النسائية بمنطقة عسير" />
-      <p class="initiative" lang="ar" dir="rtl">مبادرة رفع ملفات درايف مقدمة من جمعية أفياء النسائية بمنطقة عسير</p>
-      <h1 class="landing-title" data-i18n="appName"></h1>
+      <div class="logo-card">
+        <img class="landing-logo" src="brand/logo-full.png" width="640" height="624" alt="جمعية أفياء النسائية بمنطقة عسير" />
+        <p class="initiative" lang="ar" dir="rtl">مبادرة رفع ملفات درايف مقدمة من جمعية أفياء النسائية بمنطقة عسير</p>
+        <h1 class="landing-title" data-i18n="appName"></h1>
+      </div>
       <p class="landing-desc" data-i18n="landingDesc"></p>
 
       <div class="signin-block">
@@ -46,7 +50,8 @@
 
   <!-- ============ App ============ -->
   <div id="app" class="app" hidden>
-    <header class="topbar">
+    <header class="band app-band">
+    <div class="topbar">
       <div class="brand">
         <img src="brand/mark.png" width="28" height="42" alt="" />
         <span class="brand-name" data-i18n="appName"></span>
@@ -70,16 +75,17 @@
           </div>
         </div>
       </div>
+    </div>
+    <div class="welcome">
+      <h1 id="welcome"></h1>
+      <p id="signed-in-as"></p>
+      <span class="accent-bar" aria-hidden="true"></span>
+    </div>
     </header>
 
     <!-- Upload view -->
     <main id="view-upload" class="view upload-view">
       <section class="setup" aria-labelledby="welcome">
-        <div class="welcome">
-          <h1 id="welcome"></h1>
-          <p id="signed-in-as" class="muted"></p>
-        </div>
-
         <div id="resume-notice" class="notice" hidden>
           <p id="resume-text"></p>
           <button type="button" class="linkbtn" id="btn-dismiss-resume" data-i18n="dismiss"></button>
@@ -243,6 +249,21 @@
       <ul id="history-list" class="history-list"></ul>
       <button type="button" class="linkbtn danger" id="btn-clear-history" data-i18n="clearHistory" hidden></button>
     </main>
+
+    <nav class="bottom-nav" aria-label="Sections">
+      <a href="#upload" class="bn-item" data-tab="upload">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4m-4.5 4.5L12 4l4.5 4.5"/><path d="M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg>
+        <span data-i18n="navUpload"></span>
+      </a>
+      <button type="button" class="bn-add" id="btn-bn-add">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span class="sr-only" data-i18n="chooseFiles"></span>
+      </button>
+      <a href="#history" class="bn-item" data-tab="history">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4.5l3 1.8"/></svg>
+        <span data-i18n="navHistory"></span>
+      </a>
+    </nav>
 
     <footer class="footer">
       <img src="brand/mark.png" width="14" height="21" alt="" />

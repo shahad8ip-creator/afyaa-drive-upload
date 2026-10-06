@@ -517,6 +517,13 @@ dz.addEventListener('drop', async (e) => {
 addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', (e) => e.preventDefault());
 
+// Centre button of the phone navigation bar: jump to the upload view and pick files.
+$('btn-bn-add').addEventListener('click', () => {
+  if (location.hash === '#history') location.hash = '#upload';
+  if (selectionLocked()) return $('queue').scrollIntoView({ block: 'start' });
+  $('file-input').click();
+});
+
 $('btn-clear').addEventListener('click', () => {
   if (selectionLocked()) return;
   resetBatch();
